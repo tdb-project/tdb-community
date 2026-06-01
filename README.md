@@ -114,9 +114,10 @@ curl -X POST http://localhost:8000/v1/query \
 
 ---
 
-## Quickstart — Local (uv)
+## Run from source (optional — contributors / no Docker)
 
-For contributors or users who prefer running from source. Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+**Most users should use the Docker quickstart above.** This path is for contributors,
+or for running without Docker. Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 # 1. Clone and install
@@ -302,6 +303,9 @@ Copy `.env.example` to `.env` and edit before first run.
 ---
 
 ## Development
+
+Contributing? See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow,
+branch strategy, and PR checklist. The common commands:
 
 ```bash
 # Install dev dependencies
