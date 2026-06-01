@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Check formatting
+        run: uv run ruff format --check src/ tests/
+
+      - name: Run linter
+        run: uv run ruff check src/ tests/
+
+      - name: Dependency CVE scan
+        # Audit only our pinned runtime deps, not the CI environment's pip/setuptools
+        run: uv run pip-audit -r requirements.txt
+
+      - name: Python SAST (bandit)
+        run: uv run bandit -r src/ -ll
+
+      - name: Run tests
+        # No env vars needed — tests/conftest.py sets TDB_API_KEYS,
+        # TDB_REGISTRY_DB, and TDB_LOG_FILE before any tdb.* import.
+        run: uv run pytest
