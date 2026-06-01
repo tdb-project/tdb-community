@@ -330,3 +330,22 @@ class TestRowLimitEnforcement:
             headers=HEADERS,
         )
         assert r.status_code == 200
+
+    def test_user_supplied_limit_cannot_exceed_param_cap(self, registered_source):
+        """A LIMIT inside the SQL must not let the response exceed the param cap.
+
+        The registered fixture CSV has 5 rows. Requesting param limit=2 with a
+        SQL `LIMIT 99999` must still return only 2 rows — the cap is the real
+        ceiling, not just a default when the SQL omits LIMIT.
+        """
+        r = client.post(
+            "/v1/query",
+            json={
+                "source_id": registered_source["id"],
+                "sql": "SELECT * FROM data LIMIT 99999",
+                "limit": 2,
+            },
+            headers=HEADERS,
+        )
+        assert r.status_code == 200
+        assert r.json()["rows_returned"] == 2
