@@ -7,6 +7,21 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Row cap is now a true ceiling, not just a default** (`src/tdb/connectors/csv.py`). A query whose SQL carried its own larger `LIMIT` (e.g. `SELECT * FROM data LIMIT 99999`) previously bypassed the documented 1,000-row response cap and returned all rows. The connector now slices results to the requested `limit` unconditionally after fetch. Added a regression test.
+
+### Security / housekeeping
+
+- Removed the maintainer's personal email from `SECURITY.md` (now `security@tdb.jiracorp.co.in`) and a local build path from the `requirements.txt` header.
+- Updated `starlette` 1.0.0 → 1.2.1 (PYSEC-2026-161).
+- All product/contact URLs moved to `tdb.jiracorp.co.in`; docs now at `https://docs.tdb.jiracorp.co.in`.
+- README reframed: Docker is the primary install path; running from source is the optional contributor path.
+
+---
+
 ## [0.4.1] — 2026-05-31
 
 ### Fixed
