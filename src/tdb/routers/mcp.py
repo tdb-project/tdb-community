@@ -167,6 +167,7 @@ def _handle_tools_call(request_id: Any, params: dict, api_key: str = "") -> dict
             "columns": result.columns,
             "rows": result.rows,
             "rows_returned": len(result.rows),
+            "truncated": result.truncated,
         },
     )
 

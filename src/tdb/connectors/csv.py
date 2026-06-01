@@ -91,10 +91,11 @@ class CsvConnector(BaseConnector):
         # The community edition guarantees "max `limit` rows per response" — a
         # user-supplied `LIMIT 99999` must never exceed it. _inject_limit only
         # adds a LIMIT when one is absent, so this slice is the real ceiling.
+        truncated = len(rows_raw) > limit
         rows_raw = rows_raw[:limit]
 
         rows = [dict(zip(columns, row)) for row in rows_raw]
-        return ConnectorResult(columns=columns, rows=rows)
+        return ConnectorResult(columns=columns, rows=rows, truncated=truncated)
 
 
 # ---------------------------------------------------------------------------

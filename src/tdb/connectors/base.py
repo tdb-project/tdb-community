@@ -16,12 +16,14 @@ from typing import Any
 class ConnectorResult:
     """
     Unified query result returned by every connector.
-    columns : ordered list of column names
-    rows    : list of dicts  [{"col": value, ...}, ...]
+    columns   : ordered list of column names
+    rows      : list of dicts  [{"col": value, ...}, ...]
+    truncated : True if the row cap dropped rows the query would otherwise return
     """
 
     columns: list[str]
     rows: list[dict[str, Any]]
+    truncated: bool = False
 
 
 class BaseConnector(ABC):

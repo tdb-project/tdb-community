@@ -336,7 +336,8 @@ class TestRowLimitEnforcement:
 
         The registered fixture CSV has 5 rows. Requesting param limit=2 with a
         SQL `LIMIT 99999` must still return only 2 rows — the cap is the real
-        ceiling, not just a default when the SQL omits LIMIT.
+        ceiling, not just a default when the SQL omits LIMIT — and the response
+        must report truncated=True.
         """
         r = client.post(
             "/v1/query",
@@ -348,4 +349,25 @@ class TestRowLimitEnforcement:
             headers=HEADERS,
         )
         assert r.status_code == 200
-        assert r.json()["rows_returned"] == 2
+        body = r.json()
+        assert body["rows_returned"] == 2
+        assert body["truncated"] is True
+
+    def test_truncated_false_when_all_rows_fit(self, registered_source):
+        """When the result fits under the cap, truncated must be False.
+
+        The fixture CSV has 5 rows; a limit of 1000 returns all of them.
+        """
+        r = client.post(
+            "/v1/query",
+            json={
+                "source_id": registered_source["id"],
+                "sql": "SELECT * FROM data",
+                "limit": 1000,
+            },
+            headers=HEADERS,
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["rows_returned"] == 5
+        assert body["truncated"] is False

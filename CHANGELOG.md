@@ -12,6 +12,7 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - **Row cap is now a true ceiling, not just a default** (`src/tdb/connectors/csv.py`). A query whose SQL carried its own larger `LIMIT` (e.g. `SELECT * FROM data LIMIT 99999`) previously bypassed the documented 1,000-row response cap and returned all rows. The connector now slices results to the requested `limit` unconditionally after fetch. Added a regression test.
+- **`truncated` response flag now reflects reality.** It previously always reported `false`. The connector now reports whether the cap dropped rows, and both the REST `QueryResponse` and the MCP `query_source` result surface it — so callers (and AI agents) know when a result was capped at 1,000.
 
 ### Security / housekeeping
 

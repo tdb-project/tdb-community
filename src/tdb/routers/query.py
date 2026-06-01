@@ -147,5 +147,6 @@ def run_query(
         rows_returned=len(result.rows),
         columns=result.columns,
         rows=result.rows,
+        truncated=result.truncated,
         executed_at=executed_at,
     )
