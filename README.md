@@ -18,7 +18,7 @@ an audit file. AI tools like Claude and Cursor connect to the MCP endpoint direc
 no custom integration required.
 
 **Community edition:** one CSV file, one API key, unlimited queries, full audit log.
-[Enterprise edition](https://tdb.jiracorp.co.in) adds PostgreSQL, multi-source, OAuth 2.1, RBAC, and SOC 2-ready audit export.
+[Enterprise edition](https://docs.tdb.jiracorp.co.in/pricing/) adds PostgreSQL, multi-source, OAuth 2.1, RBAC, and SOC 2-ready audit export.
 
 ---
 
@@ -280,7 +280,7 @@ Returns rows as JSON inside a JSON-RPC `tools/call` result envelope.
 | Admin Web UI | — | Included |
 | Prometheus metrics | — | Included |
 
-Enterprise pricing starts at $499/month. See [tdb.jiracorp.co.in](https://tdb.jiracorp.co.in).
+Enterprise pricing starts at $499/month. See the [full pricing & tier comparison](https://docs.tdb.jiracorp.co.in/pricing/).
 
 ---
 
@@ -328,4 +328,4 @@ uv run ruff format --check src/ tests/
 [AGPLv3](LICENSE) — free to use, modify, and self-host.
 If you distribute a modified version as a network service, you must release your changes under the same license.
 
-Enterprise features and a commercial license (no AGPL obligations) are available at [tdb.jiracorp.co.in](https://tdb.jiracorp.co.in).
+Enterprise features and a commercial license (no AGPL obligations) are described on the [pricing page](https://docs.tdb.jiracorp.co.in/pricing/).
