@@ -20,6 +20,7 @@ no custom integration required.
 **Community edition:** one CSV file, one API key, unlimited queries, full audit log.
 [Enterprise edition](https://docs.tdb.jiracorp.co.in/pricing/) adds PostgreSQL, multi-source, OAuth 2.1, RBAC, and SOC 2-ready audit export.
 
+
 ---
 
 ## Quickstart — Docker (Windows, macOS, Linux)
@@ -280,7 +281,7 @@ Returns rows as JSON inside a JSON-RPC `tools/call` result envelope.
 | Admin Web UI | — | Included |
 | Prometheus metrics | — | Included |
 
-Enterprise pricing starts at $499/month. See the [full pricing & tier comparison](https://docs.tdb.jiracorp.co.in/pricing/).
+See the [full edition comparison](https://docs.tdb.jiracorp.co.in/pricing/) — email <hello@tdb.jiracorp.co.in> for pricing and a free 30-day evaluation.
 
 ---
 
@@ -328,4 +329,4 @@ uv run ruff format --check src/ tests/
 [AGPLv3](LICENSE) — free to use, modify, and self-host.
 If you distribute a modified version as a network service, you must release your changes under the same license.
 
-Enterprise features and a commercial license (no AGPL obligations) are described on the [pricing page](https://docs.tdb.jiracorp.co.in/pricing/).
+Enterprise features and a commercial license (no AGPL obligations) are described on the [editions page](https://docs.tdb.jiracorp.co.in/pricing/).
