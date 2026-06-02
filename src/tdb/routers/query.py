@@ -112,6 +112,23 @@ def run_query(
     # 4. Execute
     try:
         result = connector.execute(body.sql, limit=body.limit)
+    except FileNotFoundError as exc:
+        # The source's backing file is gone/unreadable (e.g. removed after
+        # registration). This is a source-availability problem, not a server
+        # fault — return 503 (matching the schema endpoint) and don't echo the
+        # absolute server path back to the caller (issue #7).
+        _log.warning(
+            "query_source_unavailable source_id=%s error=%s",
+            body.source_id,
+            str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                f"Source '{source.name}' is not accessible — its underlying "
+                "file is missing or unreadable."
+            ),
+        ) from exc
     except Exception as exc:  # noqa: BLE001
         _log.error(
             "query_execution_error source_id=%s error=%s",

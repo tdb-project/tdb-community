@@ -122,6 +122,26 @@ class TestSourceRegistry:
         r = client.post("/v1/sources", json=payload, headers=HEADERS)
         assert r.status_code == 409
 
+    def test_register_nonexistent_file_returns_400(self, tmp_path):
+        payload = {
+            "name": "ghost",
+            "source_type": "csv",
+            "connection": {"file_path": str(tmp_path / "nope.csv")},
+        }
+        r = client.post("/v1/sources", json=payload, headers=HEADERS)
+        assert r.status_code == 400
+        # the bad source must not have been persisted
+        assert client.get("/v1/sources", headers=HEADERS).json() == []
+
+    def test_register_missing_file_path_returns_400(self):
+        payload = {
+            "name": "nofp",
+            "source_type": "csv",
+            "connection": {},
+        }
+        r = client.post("/v1/sources", json=payload, headers=HEADERS)
+        assert r.status_code == 400
+
     def test_get_source_by_id(self, sample_csv):
         reg = client.post(
             "/v1/sources",
@@ -262,3 +282,17 @@ class TestQuery:
             headers=HEADERS,
         )
         assert r.status_code == 400
+
+    def test_query_after_file_removed_returns_503(self, tmp_path):
+        csv_file = tmp_path / "ephemeral.csv"
+        csv_file.write_text("id,name\n1,Alice\n")
+        source_id = self._register("ephemeral", str(csv_file))
+        csv_file.unlink()  # file disappears after a successful registration
+        r = client.post(
+            "/v1/query",
+            json={"source_id": source_id, "sql": "SELECT * FROM data", "limit": 10},
+            headers=HEADERS,
+        )
+        assert r.status_code == 503
+        # the absolute server path must not be leaked in the error detail
+        assert str(csv_file) not in r.json()["detail"]

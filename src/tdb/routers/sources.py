@@ -54,6 +54,26 @@ def register_source(
     More connector types come in later days.
     """
     key_hint = api_key[:6] + "..." if api_key else ""
+
+    # Validate the connection before persisting, so a missing/unreadable file
+    # fails fast with a clear 4xx instead of registering successfully and only
+    # surfacing as a 500 at query time (issue #7).
+    try:
+        connector = CsvConnector(body.connection)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    if not connector.validate_connection():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "CSV file not found or not readable: "
+                f"{body.connection.get('file_path')}"
+            ),
+        )
+
     try:
         record = store.register_source(body, registered_by=key_hint)
     except ValueError as exc:
