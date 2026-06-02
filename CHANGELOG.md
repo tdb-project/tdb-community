@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-06-02
+
 ### Fixed
 
 - **Row cap is now a true ceiling, not just a default** (`src/tdb/connectors/csv.py`). A query whose SQL carried its own larger `LIMIT` (e.g. `SELECT * FROM data LIMIT 99999`) previously bypassed the documented 1,000-row response cap and returned all rows. The connector now slices results to the requested `limit` unconditionally after fetch. Added a regression test.

@@ -60,7 +60,7 @@ docker run -d --rm --name tdb -p 8000:8000 `
 
 `-d` runs TDB **detached** so this same terminal stays free for the next steps — and the
 `TDB_API_KEYS` you just generated stays available to them. Naming the container `tdb` lets
-the later commands refer to it by name. To pin a version, use `:0.4.1` instead of `:latest`.
+the later commands refer to it by name. To pin a version, use `:0.4.2` instead of `:latest`.
 Verify it's up:
 
 ```bash
@@ -328,7 +328,7 @@ Returns rows as JSON inside a JSON-RPC `tools/call` result envelope.
 
 ---
 
-## What's Included (v0.4.1)
+## What's Included (v0.4.2)
 
 | Feature | Details |
 |---|---|

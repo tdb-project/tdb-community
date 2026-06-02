@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tdb-community"
-version = "0.4.1"
+version = "0.4.2"
 description = "The Data-Bridge — Turn any data source into a queryable API"
 readme = "README.md"
 license = { file = "LICENSE" }
