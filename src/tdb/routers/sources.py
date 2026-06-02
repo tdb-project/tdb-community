@@ -65,6 +65,11 @@ def register_source(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+    if not connector.path_is_allowed():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="file_path is outside the allowed data directory.",
+        )
     if not connector.validate_connection():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -190,6 +195,11 @@ def get_source_schema(
         )
 
     connector = CsvConnector(record.connection)
+    if not connector.path_is_allowed():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This source's file is outside the allowed data directory.",
+        )
     if not connector.validate_connection():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

@@ -112,6 +112,18 @@ def run_query(
     # 4. Execute
     try:
         result = connector.execute(body.sql, limit=body.limit)
+    except PermissionError as exc:
+        # Source file resolves outside TDB_ALLOWED_DATA_DIR (e.g. the var was
+        # set after this source was registered). Refuse rather than read it.
+        _log.warning(
+            "query_source_forbidden source_id=%s error=%s",
+            body.source_id,
+            str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This source's file is outside the allowed data directory.",
+        ) from exc
     except FileNotFoundError as exc:
         # The source's backing file is gone/unreadable (e.g. removed after
         # registration). This is a source-availability problem, not a server

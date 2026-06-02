@@ -24,6 +24,8 @@ services:
       TDB_REGISTRY_DB: /app/data/tdb_registry.db
       TDB_LOG_FILE: /app/logs/tdb_audit.jsonl
       TDB_LOG_LEVEL: "${TDB_LOG_LEVEL:-INFO}"
+      # Confine registered CSV paths to the read-only /data mount below.
+      TDB_ALLOWED_DATA_DIR: /data
     volumes:
       # Persists the source registry across restarts
       - tdb_data:/app/data

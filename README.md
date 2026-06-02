@@ -379,6 +379,7 @@ All configuration is via environment variables:
 | `TDB_PORT` | `8000` | Server port. Used by both Docker Compose and the local `tdb serve` command. |
 | `TDB_URL` | `http://localhost:8000` | Server URL used by the CLI (`tdb register`, `tdb query`). Set this if the server runs on a non-default port or remote host. |
 | `TDB_DATA_DIR` | `./data` | Docker Compose only. Host directory mounted read-only into the container at `/data`; register CSVs using `file_path: /data/your_file.csv`. |
+| `TDB_ALLOWED_DATA_DIR` | _(unset)_ | Security. When set, registered CSV `file_path` values must resolve to a path inside this directory (symlinks and `..` are resolved first); anything outside is rejected with `403`. Unset means no restriction. The Docker image defaults this to `/data`, so the bundled deployment is confined out of the box. For a bare `tdb serve`, set it to the folder holding your CSVs. |
 
 Copy `.env.example` to `.env` and edit before first run.
 
