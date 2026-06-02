@@ -224,11 +224,26 @@ process required.
 
 **Verify the endpoint is reachable:**
 
+**macOS / Linux:**
 ```bash
 curl -s -X POST http://localhost:8000/v1/mcp \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}'
+```
+
+**Windows (PowerShell):**
+```powershell
+$body = @{
+  jsonrpc = "2.0"
+  id      = 1
+  method  = "initialize"
+  params  = @{ protocolVersion = "2024-11-05" }
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/v1/mcp `
+  -Headers @{ Authorization = "Bearer YOUR_API_KEY" } `
+  -ContentType "application/json" -Body $body
 ```
 
 A successful response returns a JSON-RPC result with `serverInfo` and `capabilities`.
