@@ -31,10 +31,19 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/tdb-project/tdb-community
+          # Tagging policy (industry convention):
+          #   - `latest`, `X.Y.Z`, `X.Y`  ← published only on a `v*` release tag.
+          #     `flavor: latest=auto` applies `latest` to stable semver tags and
+          #     skips pre-releases (e.g. v1.0.0-rc1), so `latest` always == the
+          #     newest stable RELEASE — never the tip of `main`.
+          #   - `edge`                     ← published on every push to `main`,
+          #     so the bleeding-edge build is available without moving `latest`.
+          flavor: |
+            latest=auto
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=edge,branch=main
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

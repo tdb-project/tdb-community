@@ -9,6 +9,10 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Docker image tag policy now follows release tags, not `main`.** `latest`, `X.Y.Z`, and `X.Y` are published only when a `v*` release tag is cut (so `:latest` always points at the newest stable release and skips pre-releases). Pushes to `main` publish a separate `edge` tag instead of moving `latest`. Pull `:edge` for bleeding-edge builds; pin `:X.Y.Z` (or a digest) for production.
+
 ## [0.4.2] — 2026-06-02
 
 ### Fixed
