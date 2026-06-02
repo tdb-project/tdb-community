@@ -74,14 +74,14 @@ def run_query(
     ```json
     {
       "source_id": "abc-123",
-      "sql": "SELECT * FROM data WHERE country = 'IN'",
+      "sql": "SELECT * FROM data LIMIT 50",
       "limit": 50
     }
     ```
 
-    The table name in your SQL should match the **source name** you used
-    when registering (or use `data` as a universal alias — the connector
-    maps it automatically).
+    Always use `data` as the table name: the registered CSV is loaded into an
+    in-memory table under that fixed name, regardless of the source name or the
+    file name.
     """
     key_hint = api_key[:6] + "..." if api_key else ""
 
