@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
     dev_mode = "dev-insecure-key-change-me" in os.environ.get(
         "TDB_API_KEYS", "dev-insecure-key-change-me"
     )
-    _log.info("tdb_startup version=%s dev_mode=%s", "0.4.1", dev_mode)
+    _log.info("tdb_startup version=%s dev_mode=%s", "0.4.2", dev_mode)
     if dev_mode:
         print(
             "\n⚠️  WARNING: TDB is running with the default insecure dev API key.\n"
@@ -63,7 +63,7 @@ app = FastAPI(
         "A secure, auditable API layer over your existing data sources. "
         "Register a data source once, query it anywhere."
     ),
-    version="0.4.1",
+    version="0.4.2",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -89,7 +89,7 @@ _log = get_logger("tdb.main")
 def root():
     return {
         "product": "The Data-Bridge",
-        "version": "0.4.1",
+        "version": "0.4.2",
         "status": "running",
         "docs": "/docs",
     }

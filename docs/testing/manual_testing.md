@@ -1,7 +1,7 @@
 # TDB Community — Manual Testing Guide
 
-**Version:** 0.4.1
-**Last updated:** 2026-05-31
+**Version:** 0.4.2
+**Last updated:** 2026-06-02
 
 This document describes how to manually verify TDB end-to-end after code changes.
 It complements the automated test suite (`pytest tests/`) with scenarios that
@@ -38,7 +38,7 @@ export BASE="http://localhost:8000"
 |---|---|---|
 | 1 | Run `TDB_API_KEYS=manual-test-key uv run tdb serve` | Server starts on port 8000, no errors |
 | 2 | `curl $BASE/health` | `{"status": "ok"}` |
-| 3 | `curl $BASE/` | JSON with `"product": "The Data-Bridge"` and `"version": "0.4.1"` |
+| 3 | `curl $BASE/` | JSON with `"product": "The Data-Bridge"` and `"version": "0.4.2"` |
 | 4 | Open `http://localhost:8000/docs` in browser | Swagger UI loads with all endpoints visible |
 | 5 | Check logs — no deprecation warnings in terminal output | No `on_event is deprecated` warning |
 

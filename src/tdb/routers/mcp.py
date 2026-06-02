@@ -103,7 +103,7 @@ def _handle_initialize(request_id: Any, _params: dict) -> dict:
         {
             "protocolVersion": "2024-11-05",
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "tdb-community", "version": "0.4.1"},
+            "serverInfo": {"name": "tdb-community", "version": "0.4.2"},
         },
     )
 
