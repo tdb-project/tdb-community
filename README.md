@@ -25,93 +25,131 @@ no custom integration required.
 
 ## Quickstart — Docker (Windows, macOS, Linux)
 
-The image is published to GHCR. You only need [Docker Desktop](https://www.docker.com/products/docker-desktop/) — no `git clone`, no build step, no Python required.
+The image is published to GHCR — no `git clone`, no build step, no Python required. You only
+need [Docker Desktop](https://www.docker.com/products/docker-desktop/). Put your CSV in a
+`data/` folder next to where you run the commands below.
 
-### Try it now (ephemeral — data gone on stop)
+> **Windows: use `curl.exe`, not `curl`.** In PowerShell, `curl` is an alias for
+> `Invoke-WebRequest`, which does not understand `-X`, `-H`, or `-d`. The Windows snippets
+> below use `curl.exe` so you get the real curl.
+
+### Step 1 — Run it (detached)
 
 **macOS / Linux:**
 ```bash
-docker run --rm -p 8000:8000 \
-  -e TDB_API_KEYS=my-dev-key \
-  -v /path/to/your/csvs:/data:ro \
+export TDB_API_KEYS=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+
+docker run -d --rm --name tdb -p 8000:8000 \
+  -e TDB_API_KEYS \
+  -v "$PWD/data:/data:ro" \
   ghcr.io/tdb-project/tdb-community:latest
 ```
 
 **Windows (PowerShell):**
 ```powershell
-docker run --rm -p 8000:8000 `
-  -e TDB_API_KEYS=my-dev-key `
-  -v C:\path\to\your\csvs:/data:ro `
+$env:TDB_API_KEYS = (python3 -c "import secrets; print(secrets.token_hex(32))")
+
+docker run -d --rm --name tdb -p 8000:8000 `
+  -e TDB_API_KEYS `
+  -v "${PWD}\data:/data:ro" `
   ghcr.io/tdb-project/tdb-community:latest
 ```
 
-Open [http://localhost:8000/docs](http://localhost:8000/docs). The container is deleted when stopped.
-
-### Persistent setup — Docker Compose
-
-**Step 1 — get the compose file** (works on all platforms):
-
-```bash
-# macOS / Linux
-mkdir tdb && cd tdb
-curl -fsSL https://raw.githubusercontent.com/tdb-project/tdb-community/main/docker-compose.yml \
-  -o docker-compose.yml
-```
-
-```powershell
-# Windows (PowerShell)
-mkdir tdb; cd tdb
-curl -fsSL https://raw.githubusercontent.com/tdb-project/tdb-community/main/docker-compose.yml `
-  -o docker-compose.yml
-```
-
-**Step 2 — configure your API key** (pick the method for your OS):
+`-d` runs TDB **detached** so this same terminal stays free for the next steps — and the
+`TDB_API_KEYS` you just generated stays available to them. Naming the container `tdb` lets
+the later commands refer to it by name. To pin a version, use `:0.4.1` instead of `:latest`.
+Verify it's up:
 
 ```bash
-# macOS / Linux — generate and set in the current shell
-export TDB_API_KEYS=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-```
-
-```powershell
-# Windows (PowerShell) — generate and set in the current shell
-$env:TDB_API_KEYS = (python3 -c "import secrets; print(secrets.token_hex(32))")
-```
-
-```ini
-# All platforms — recommended for a permanent setup:
-# Copy .env.example to .env and set your key there.
-# Docker Compose loads .env automatically.
-TDB_API_KEYS=your-strong-key-here
-```
-
-**Step 3 — add your CSV, start, and query:**
-
-```bash
-# Create the data directory and copy your CSV into it
-# macOS/Linux:  mkdir -p data && cp /path/to/file.csv data/
-# Windows:      mkdir data; copy C:\path\to\file.csv data\
-
-# Start (pulls pre-built image — no build step)
-docker compose up -d
-
-# Verify
 curl http://localhost:8000/health
 # → {"status": "ok"}
+```
 
-# Register your CSV (replace $TDB_API_KEYS with your key if not set in the shell)
+Then open [http://localhost:8000/docs](http://localhost:8000/docs) for the Swagger UI, and
+follow logs any time with `docker logs -f tdb`.
+
+> **Want data to survive a restart?** The `--rm` run above is ephemeral. For a persistent
+> setup, grab the [`docker-compose.yml`](docker-compose.yml) from this repo (it mounts named
+> volumes for the registry and audit log), set `TDB_API_KEYS` in a `.env` file (copy
+> `.env.example`), and run `docker compose up -d` instead of the `docker run` above — Steps
+> 2–5 are identical. See [Configuration](#configuration) for the variables it reads.
+
+### Step 2 — Register your CSV
+
+**macOS / Linux:**
+```bash
 curl -X POST http://localhost:8000/v1/sources \
   -H "Authorization: Bearer $TDB_API_KEYS" \
   -H "Content-Type: application/json" \
   -d '{"name":"mydata","source_type":"csv","connection":{"file_path":"/data/your_file.csv"}}'
+```
 
-# Query it
+**Windows (PowerShell):**
+```powershell
+curl.exe -X POST http://localhost:8000/v1/sources `
+  -H "Authorization: Bearer $env:TDB_API_KEYS" `
+  -H "Content-Type: application/json" `
+  -d '{\"name\":\"mydata\",\"source_type\":\"csv\",\"connection\":{\"file_path\":\"/data/your_file.csv\"}}'
+```
+
+Schema (column names + types) is auto-detected. The table is always queryable as `data`.
+
+### Step 3 — Query it (REST)
+
+**macOS / Linux:**
+```bash
 curl -X POST http://localhost:8000/v1/query \
   -H "Authorization: Bearer $TDB_API_KEYS" \
   -H "Content-Type: application/json" \
-  -d '{"source_id":"<id-from-register>","sql":"SELECT * FROM data LIMIT 10"}'
+  -d '{"source_id":"<id-from-step-2>","sql":"SELECT * FROM data LIMIT 10"}'
 ```
 
-> **Note:** if `TDB_API_KEYS` is not set, the compose file falls back to a known-insecure default key and prints a startup warning. Always set your own key before exposing TDB to a network.
+**Windows (PowerShell):**
+```powershell
+curl.exe -X POST http://localhost:8000/v1/query `
+  -H "Authorization: Bearer $env:TDB_API_KEYS" `
+  -H "Content-Type: application/json" `
+  -d '{\"source_id\":\"<id-from-step-2>\",\"sql\":\"SELECT * FROM data LIMIT 10\"}'
+```
+
+Read-only is enforced — `INSERT` / `UPDATE` / `DELETE` / `DROP` are rejected. Responses are
+capped at **1,000 rows** even if your SQL asks for more.
+
+### Step 4 — Connect an AI tool (MCP)
+
+TDB exposes a standard [MCP](https://modelcontextprotocol.io) endpoint at `/v1/mcp`. The
+Community Edition ships one tool, `query_source`. See
+[Connecting an MCP Client](#connecting-an-mcp-client) below for Claude Desktop, Cursor, and
+VS Code configuration.
+
+### Step 5 — Check the audit log
+
+Every query — REST or from an AI tool — is appended to a local NDJSON file inside the container:
+
+**macOS / Linux:**
+```bash
+docker exec tdb cat /app/tdb_audit.jsonl | tail -3
+```
+
+**Windows (PowerShell):**
+```powershell
+docker exec tdb cat /app/tdb_audit.jsonl | Select-Object -Last 3
+```
+
+Each line records the SQL, the row count, a truncated key hint (never the raw key), and a
+UTC timestamp.
+
+### Stopping TDB
+
+When you're done, stop the container from the same terminal:
+
+```bash
+docker stop tdb
+```
+
+Because it was started with `--rm`, stopping also **removes** it — the ephemeral registry and
+audit log are discarded. For a setup that survives restarts, use the Compose option noted in
+Step 1.
 
 ---
 
@@ -259,7 +297,7 @@ Returns rows as JSON inside a JSON-RPC `tools/call` result envelope.
 | MCP server | One tool: `query_source` — compatible with Claude, Cursor, Continue |
 | Audit log | Every query logged to NDJSON file (`TDB_LOG_FILE`) |
 | CLI | `tdb serve`, `tdb register`, `tdb query` |
-| Docker Compose | One-command install on Linux/Mac |
+| Docker Compose | One-command install on Windows, macOS, and Linux |
 | OpenAPI / Swagger | Auto-generated at `/docs` |
 
 ---
