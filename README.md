@@ -92,7 +92,19 @@ curl.exe -X POST http://localhost:8000/v1/sources `
   -d '{\"name\":\"mydata\",\"source_type\":\"csv\",\"connection\":{\"file_path\":\"/data/your_file.csv\"}}'
 ```
 
-Schema (column names + types) is auto-detected. The table is always queryable as `data`.
+Fill in the two placeholders:
+
+- **`name`** (`mydata` above) — any label you choose for this source.
+- **`file_path`** (`/data/your_file.csv` above) — the path to *your* CSV **inside the
+  container**. Replace `your_file.csv` with your file's name; it must live in the `data/`
+  folder you mounted in Step 1, so `/data/<your-file>.csv`.
+
+Column names and types are auto-detected from the CSV header row, so you don't declare a
+schema. The response includes the new source's `id` — copy it for Step 3.
+
+> **The table is always named `data`.** Whatever your file or source is called, TDB exposes
+> its rows as a single table named `data`. That fixed name — not your filename — is what you
+> put in the `FROM` clause in Step 3.
 
 ### Step 3 — Query it (REST)
 
@@ -101,7 +113,7 @@ Schema (column names + types) is auto-detected. The table is always queryable as
 curl -X POST http://localhost:8000/v1/query \
   -H "Authorization: Bearer $TDB_API_KEYS" \
   -H "Content-Type: application/json" \
-  -d '{"source_id":"<id-from-step-2>","sql":"SELECT * FROM data LIMIT 10"}'
+  -d '{"source_id":"<id-from-step-2>","sql":"SELECT * FROM data","limit":10}'
 ```
 
 **Windows (PowerShell):**
@@ -109,11 +121,14 @@ curl -X POST http://localhost:8000/v1/query \
 curl.exe -X POST http://localhost:8000/v1/query `
   -H "Authorization: Bearer $env:TDB_API_KEYS" `
   -H "Content-Type: application/json" `
-  -d '{\"source_id\":\"<id-from-step-2>\",\"sql\":\"SELECT * FROM data LIMIT 10\"}'
+  -d '{\"source_id\":\"<id-from-step-2>\",\"sql\":\"SELECT * FROM data\",\"limit\":10}'
 ```
 
-Read-only is enforced — `INSERT` / `UPDATE` / `DELETE` / `DROP` are rejected. Responses are
-capped at **1,000 rows** even if your SQL asks for more.
+`SELECT * FROM data` works on any CSV — swap it for any read-only query you like. The
+**column names are exactly your CSV's header row** (run `SELECT * FROM data` once to see
+them). The optional `limit` field caps the response: it defaults to **100** and is hard-capped
+at **1,000**, so a bare `SELECT *` returns at most those rows regardless of your SQL. Read-only
+is enforced — `INSERT` / `UPDATE` / `DELETE` / `DROP` are rejected.
 
 ### Step 4 — Connect an AI tool (MCP)
 
@@ -181,8 +196,8 @@ uv run tdb register /path/to/your/file.csv --name mydata
 # 4. Query it
 uv run tdb query "SELECT * FROM data LIMIT 10"
 
-# 5. JSON or CSV output
-uv run tdb query "SELECT * FROM data WHERE country = 'IN'" --output json
+# 5. JSON or CSV output (column names are your CSV's header row)
+uv run tdb query "SELECT * FROM data" --output json
 uv run tdb query "SELECT * FROM data" --output csv
 ```
 
