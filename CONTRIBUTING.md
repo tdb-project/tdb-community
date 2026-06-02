@@ -130,6 +130,25 @@ Before opening a pull request:
 
 ---
 
+## Releasing & image tags
+
+The published image (`ghcr.io/tdb-project/tdb-community`) is built by
+`.github/workflows/publish.yml`, and the tag you get depends on what triggered the build:
+
+| Tag | When it's published | Use it for |
+|---|---|---|
+| `latest` | A `v*` release tag (newest **stable** release; pre-releases like `v1.0.0-rc1` are skipped) | A quick try of the current release |
+| `X.Y.Z` (e.g. `0.4.2`) | A `v*` release tag — **immutable**, never overwritten | **Production** — pin this (or a `@sha256:` digest) |
+| `X.Y` (e.g. `0.4`) | A `v*` release tag — floats to the newest patch | Auto-getting patch fixes within a minor |
+| `edge` | Every push to `main` | Trying unreleased changes |
+
+`latest` follows **releases, not `main`** — a routine merge to `main` ships only `:edge` and
+never moves `:latest`. **Cutting a release** (maintainers): bump the version, move
+`CHANGELOG.md` `[Unreleased]` → the new version, then push an annotated `vX.Y.Z` tag on `main`
+— the workflow publishes `latest`/`X.Y.Z`/`X.Y` automatically.
+
+---
+
 ## Security Issues
 
 Do not open public issues for vulnerabilities. See [SECURITY.md](SECURITY.md) for the responsible disclosure process.
