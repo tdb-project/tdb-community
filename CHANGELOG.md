@@ -13,9 +13,11 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Row cap is now a true ceiling, not just a default** (`src/tdb/connectors/csv.py`). A query whose SQL carried its own larger `LIMIT` (e.g. `SELECT * FROM data LIMIT 99999`) previously bypassed the documented 1,000-row response cap and returned all rows. The connector now slices results to the requested `limit` unconditionally after fetch. Added a regression test.
 - **`truncated` response flag now reflects reality.** It previously always reported `false`. The connector now reports whether the cap dropped rows, and both the REST `QueryResponse` and the MCP `query_source` result surface it — so callers (and AI agents) know when a result was capped at 1,000.
+- **CSV source paths are validated at registration** (`src/tdb/routers/sources.py`, `src/tdb/routers/query.py`). Registering a CSV with a missing or unreadable `file_path` previously returned `201` and only failed later at query time as an HTTP **500** that echoed the absolute server path. Registration now rejects a bad path up front with **400** and persists nothing; if a source's file disappears after registration, queries return **503** with a source-name message and no path disclosure. Added regression tests. (#7)
 
 ### Security / housekeeping
 
+- **CSV `file_path` can be confined to an allowed directory** via the new `TDB_ALLOWED_DATA_DIR` env var (`src/tdb/connectors/csv.py`, `src/tdb/config.py`). Without it the CSV connector reads any path the server process can access — a client with the API key could register `file_path: /etc/passwd` and read it back. When set, paths that resolve (symlinks and `..` expanded) outside the directory are rejected with **403** at register, schema, and query time. Opt-in so existing setups are unaffected; the Docker image defaults it to `/data`, so the bundled deployment is confined out of the box. Added tests. (#6)
 - Removed the maintainer's personal email from `SECURITY.md` (now `security@tdb.jiracorp.co.in`) and a local build path from the `requirements.txt` header.
 - Updated `starlette` 1.0.0 → 1.2.1 (PYSEC-2026-161).
 - All product/contact URLs moved to `tdb.jiracorp.co.in`; docs now at `https://docs.tdb.jiracorp.co.in`.
