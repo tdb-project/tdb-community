@@ -60,7 +60,12 @@ docker run -d --rm --name tdb -p 8000:8000 `
 
 `-d` runs TDB **detached** so this same terminal stays free for the next steps — and the
 `TDB_API_KEYS` you just generated stays available to them. Naming the container `tdb` lets
-the later commands refer to it by name. To pin a version, use `:0.4.2` instead of `:latest`.
+the later commands refer to it by name.
+
+> **Image tags.** `:latest` always points to the newest **stable release** (not the tip of
+> `main`). For production, pin an immutable release tag like `:0.4.2` (or a `@sha256:` digest);
+> `:0.4` floats to the newest patch within a minor. Want unreleased changes? Pull `:edge`,
+> which tracks the latest `main` build.
 Verify it's up:
 
 ```bash
