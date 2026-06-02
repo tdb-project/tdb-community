@@ -296,3 +296,65 @@ class TestQuery:
         assert r.status_code == 503
         # the absolute server path must not be leaked in the error detail
         assert str(csv_file) not in r.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# CSV path confinement (TDB_ALLOWED_DATA_DIR) — issue #6
+# ---------------------------------------------------------------------------
+
+
+class TestPathConfinement:
+    @staticmethod
+    def _register(name: str, file_path: str):
+        return client.post(
+            "/v1/sources",
+            json={
+                "name": name,
+                "source_type": "csv",
+                "connection": {"file_path": file_path},
+            },
+            headers=HEADERS,
+        )
+
+    def test_unset_allows_any_path(self, tmp_path):
+        # No TDB_ALLOWED_DATA_DIR set -> current behavior, arbitrary path allowed.
+        f = tmp_path / "anywhere.csv"
+        f.write_text("id\n1\n")
+        assert self._register("anyplace", str(f)).status_code == 201
+
+    def test_register_outside_allowed_dir_returns_403(self, tmp_path, monkeypatch):
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        outside = tmp_path / "outside.csv"
+        outside.write_text("id\n1\n")
+        monkeypatch.setenv("TDB_ALLOWED_DATA_DIR", str(allowed))
+        r = self._register("out", str(outside))
+        assert r.status_code == 403
+        # nothing should have been persisted
+        assert client.get("/v1/sources", headers=HEADERS).json() == []
+
+    def test_register_inside_allowed_dir_ok_and_queryable(self, tmp_path, monkeypatch):
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        inside = allowed / "data.csv"
+        inside.write_text("id,name\n1,Alice\n")
+        monkeypatch.setenv("TDB_ALLOWED_DATA_DIR", str(allowed))
+        reg = self._register("inside", str(inside))
+        assert reg.status_code == 201
+        q = client.post(
+            "/v1/query",
+            json={"source_id": reg.json()["id"], "sql": "SELECT * FROM data"},
+            headers=HEADERS,
+        )
+        assert q.status_code == 200
+        assert q.json()["rows_returned"] == 1
+
+    def test_symlink_escape_is_blocked(self, tmp_path, monkeypatch):
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        secret = tmp_path / "secret.csv"
+        secret.write_text("id\n42\n")
+        link = allowed / "link.csv"
+        link.symlink_to(secret)  # lives inside allowed/, but resolves outside
+        monkeypatch.setenv("TDB_ALLOWED_DATA_DIR", str(allowed))
+        assert self._register("link", str(link)).status_code == 403

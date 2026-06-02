@@ -27,6 +27,7 @@ from typing import Any
 
 import duckdb
 
+from tdb.config import get_allowed_data_dir
 from tdb.connectors.base import BaseConnector, ConnectorResult
 
 
@@ -51,11 +52,30 @@ class CsvConnector(BaseConnector):
         """Return True if the CSV file exists and is readable."""
         return os.path.isfile(self._file_path) and os.access(self._file_path, os.R_OK)
 
+    def path_is_allowed(self) -> bool:
+        """
+        Return True if ``file_path`` is within ``TDB_ALLOWED_DATA_DIR``.
+
+        When that variable is unset, all paths are allowed (opt-in confinement).
+        Symlinks and ``..`` are resolved before the comparison so they cannot be
+        used to escape the allowed directory.
+        """
+        allowed = get_allowed_data_dir()
+        if not allowed:
+            return True
+        allowed_real = os.path.realpath(allowed)
+        target_real = os.path.realpath(self._file_path)
+        return target_real == allowed_real or target_real.startswith(
+            allowed_real + os.sep
+        )
+
     def get_schema(self) -> dict[str, str]:
         """
         Return column-name → DuckDB type mapping.
         Example: {"id": "BIGINT", "name": "VARCHAR", "price": "DOUBLE"}
         """
+        if not self.path_is_allowed():
+            raise PermissionError("file_path is outside the allowed data directory")
         conn = duckdb.connect(":memory:")
         try:
             rel = conn.read_csv(self._file_path)
@@ -69,6 +89,8 @@ class CsvConnector(BaseConnector):
         The table name `data` (or any alias) is mapped to the actual file.
         A LIMIT clause is injected if missing.
         """
+        if not self.path_is_allowed():
+            raise PermissionError("file_path is outside the allowed data directory")
         if not self.validate_connection():
             raise FileNotFoundError(
                 f"CSV file not found or not readable: {self._file_path}"

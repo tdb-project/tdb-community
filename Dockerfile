@@ -24,6 +24,10 @@ USER tdb
 
 ENV PYTHONPATH=/app/src
 
+# Confine registered CSV paths to the read-only data mount by default, so the
+# bundled deployment is secure out of the box (see TDB_ALLOWED_DATA_DIR).
+ENV TDB_ALLOWED_DATA_DIR=/data
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 

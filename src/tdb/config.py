@@ -22,3 +22,17 @@ def get_log_file() -> str:
 
 def get_registry_db_path() -> str:
     return os.environ.get("TDB_REGISTRY_DB", "data/tdb_registry.db")
+
+
+def get_allowed_data_dir() -> str | None:
+    """
+    Directory that CSV ``file_path`` values must reside within.
+
+    When set, the CSV connector rejects any source whose file resolves to a
+    path outside this directory (symlinks and ``..`` are resolved first). When
+    unset (the default), no restriction is applied — paths are allowed as-is.
+    The Docker image sets this to ``/data`` so the bundled deployment is
+    confined out of the box.
+    """
+    val = os.environ.get("TDB_ALLOWED_DATA_DIR", "").strip()
+    return val or None
