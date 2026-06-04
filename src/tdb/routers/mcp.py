@@ -22,6 +22,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from tdb import __version__
 from tdb.audit.logger import get_logger, log_query
 from tdb.config import get_api_keys
 from tdb.connectors.csv import CsvConnector
@@ -103,7 +104,7 @@ def _handle_initialize(request_id: Any, _params: dict) -> dict:
         {
             "protocolVersion": "2024-11-05",
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "tdb-community", "version": "0.4.2"},
+            "serverInfo": {"name": "tdb-community", "version": __version__},
         },
     )
 
