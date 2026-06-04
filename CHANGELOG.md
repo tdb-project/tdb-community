@@ -11,6 +11,7 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Version is now defined once** in `src/tdb/__init__.py` (`__version__`) and imported by the FastAPI app version, the `/` banner, and the MCP `serverInfo`. Previously the version string was hardcoded in three places, which risks drift on release. No behaviour change — all three still report `0.4.2`.
 - **Docker image tag policy now follows release tags, not `main`.** `latest`, `X.Y.Z`, and `X.Y` are published only when a `v*` release tag is cut (so `:latest` always points at the newest stable release and skips pre-releases). Pushes to `main` publish a separate `edge` tag instead of moving `latest`. Pull `:edge` for bleeding-edge builds; pin `:X.Y.Z` (or a digest) for production.
 
 ## [0.4.2] — 2026-06-02

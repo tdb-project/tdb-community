@@ -20,6 +20,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from tdb import __version__
 from tdb.audit.logger import get_logger
 from tdb.config import get_log_level
 from tdb.registry.migrations import run_migrations
@@ -63,7 +64,7 @@ app = FastAPI(
         "A secure, auditable API layer over your existing data sources. "
         "Register a data source once, query it anywhere."
     ),
-    version="0.4.2",
+    version=__version__,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -89,7 +90,7 @@ _log = get_logger("tdb.main")
 def root():
     return {
         "product": "The Data-Bridge",
-        "version": "0.4.2",
+        "version": __version__,
         "status": "running",
         "docs": "/docs",
     }
