@@ -145,8 +145,12 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8000/v1/query `
 `SELECT * FROM data` works on any CSV — swap it for any read-only query you like. The
 **column names are exactly your CSV's header row** (run `SELECT * FROM data` once to see
 them). The optional `limit` field caps the response: it defaults to **100** and is hard-capped
-at **1,000**, so a bare `SELECT *` returns at most those rows regardless of your SQL. Read-only
-is enforced — `INSERT` / `UPDATE` / `DELETE` / `DROP` are rejected.
+at **1,000**, so a bare `SELECT *` returns at most those rows regardless of your SQL.
+
+**Read-only is enforced.** A statement must start with `SELECT`, and any of these
+keywords — `INSERT`, `UPDATE`, `DELETE`, `DROP`, `CREATE`, `ALTER`, `TRUNCATE`,
+`REPLACE`, `MERGE` (case-insensitive) — is rejected with a `400`. Aggregations,
+`WHERE`, `JOIN` (the single table is `data`), `GROUP BY`, and `ORDER BY` are all fine.
 
 ### Step 4 — Connect an AI tool (MCP)
 
@@ -169,8 +173,23 @@ docker exec tdb cat /app/tdb_audit.jsonl | tail -3
 docker exec tdb cat /app/tdb_audit.jsonl | Select-Object -Last 3
 ```
 
-Each line records the SQL, the row count, a truncated key hint (never the raw key), and a
-UTC timestamp.
+Each line is a self-contained JSON object — one query, one line:
+
+```json
+{"event":"query","source_id":"3f9c2a7e-…","sql":"SELECT * FROM data LIMIT 10","rows_returned":10,"key_hint":"a1b2c3…","ts":"2026-06-20T12:34:56.789012+00:00"}
+```
+
+| Field | Meaning |
+|---|---|
+| `event` | Always `"query"` in this edition. |
+| `source_id` | The registered source the query ran against. |
+| `sql` | The exact SQL submitted (REST or via the MCP tool). |
+| `rows_returned` | Row count in the response (after the 1,000-row cap). |
+| `key_hint` | First 6 characters of the API key used, then `…`. **The raw key is never written** — this is only enough to tell two keys apart. |
+| `ts` | UTC timestamp, ISO-8601 with a `+00:00` offset so SIEM tools and log parsers place it correctly. |
+
+Because it's newline-delimited JSON, you can stream it straight into `jq`, Loki, or any
+log pipeline — e.g. `docker exec tdb cat /app/tdb_audit.jsonl | jq 'select(.rows_returned > 100)'`.
 
 ### Stopping TDB
 
@@ -331,6 +350,71 @@ The single MCP tool exposed is `query_source`. It accepts:
 
 Returns rows as JSON inside a JSON-RPC `tools/call` result envelope.
 
+#### Calling the tool directly
+
+You rarely call this by hand — your AI assistant does it for you — but it's useful for
+testing the endpoint. Invoke `query_source` with a `tools/call` request:
+
+**macOS / Linux:**
+```bash
+curl -s -X POST http://localhost:8000/v1/mcp \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"query_source","arguments":{"sql":"SELECT * FROM data LIMIT 5"}}}'
+```
+
+**Windows (PowerShell):**
+```powershell
+$body = @{
+  jsonrpc = "2.0"
+  id      = 2
+  method  = "tools/call"
+  params  = @{ name = "query_source"; arguments = @{ sql = "SELECT * FROM data LIMIT 5" } }
+} | ConvertTo-Json -Depth 5
+
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/v1/mcp `
+  -Headers @{ Authorization = "Bearer YOUR_API_KEY" } `
+  -ContentType "application/json" -Body $body
+```
+
+The result envelope wraps the rows as JSON text — the inner payload carries
+`source`, `columns`, `rows`, `rows_returned`, and `truncated` (true when the
+1,000-row cap dropped rows):
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "content": [
+      { "type": "text", "text": "{\"source\": \"mydata\", \"columns\": [...], \"rows\": [...], \"rows_returned\": 5, \"truncated\": false}" }
+    ]
+  }
+}
+```
+
+#### Querying from an AI assistant
+
+Once the server is configured in your client (see above), you don't write SQL — you ask
+in plain language and the assistant calls `query_source` for you, writing the SQL against
+the `data` table. After connecting in **VS Code (Copilot)**, **Claude Desktop**, or
+**Cursor**, try prompts like:
+
+- *"Using the tdb `query_source` tool, how many rows are in my data?"*
+- *"Show me the first 5 rows."*
+- *"What columns does the dataset have, and what does a typical row look like?"*
+- *"List the top 10 customers by revenue, highest first."*
+- *"How many records have country = 'IN'?"*
+
+TDB enforces read-only access and caps every response at 1,000 rows, so the assistant
+can explore freely without being able to modify your data. If a result was capped, the
+`truncated` flag tells the model to narrow the query (add a `WHERE` or aggregate instead
+of `SELECT *`).
+
+> **Tip (VS Code):** if the assistant doesn't reach for the tool, name it explicitly —
+> "use the **tdb** server's `query_source` tool" — or confirm it's connected via
+> **MCP: List Servers** in the Command Palette.
+
 ---
 
 ## What's Included (v0.4.2)
@@ -371,6 +455,29 @@ See the [full edition comparison](https://docs.tdb.jiracorp.co.in/pricing/) — 
 
 ---
 
+## REST API reference
+
+All endpoints are served under `/v1` and require `Authorization: Bearer <key>` unless
+noted. The live, auto-generated request/response schemas are at
+[`/docs`](http://localhost:8000/docs) (Swagger UI) — this table is the at-a-glance map.
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `POST` | `/v1/sources` | ✅ | Register a CSV source (`201`; `409` if one is already registered) |
+| `GET` | `/v1/sources` | ✅ | List registered sources |
+| `GET` | `/v1/sources/{id}` | ✅ | Get one source's full detail |
+| `DELETE` | `/v1/sources/{id}` | ✅ | Remove a source (`204`) |
+| `GET` | `/v1/sources/{id}/schema` | ✅ | Column names and inferred types — no rows |
+| `POST` | `/v1/query` | ✅ | Run a read-only `SELECT` (max 1,000 rows) |
+| `POST` | `/v1/mcp` | ✅ * | MCP JSON-RPC endpoint (`initialize`, `tools/list`, `tools/call`) |
+| `GET` | `/health` | — | Liveness probe → `{"status": "ok"}` |
+| `GET` | `/` | — | Service banner and version |
+
+\* On `/v1/mcp`, the `initialize` handshake is unauthenticated so clients can discover the
+server; `tools/list` and `tools/call` require the Bearer key.
+
+---
+
 ## Configuration
 
 All configuration is via environment variables:
@@ -408,6 +515,32 @@ uv run ruff check src/ tests/
 # Format check
 uv run ruff format --check src/ tests/
 ```
+
+---
+
+## Troubleshooting
+
+When a request fails, the HTTP status (or JSON-RPC error code) tells you what went wrong:
+
+| Status | What it means | Likely cause & fix |
+|---|---|---|
+| `401` Unauthorized | Bad or missing API key | The `Authorization: Bearer <key>` header doesn't match a value in `TDB_API_KEYS`. Over MCP this surfaces as JSON-RPC error `-32001`. Check the key and that the env var is set on the server. |
+| `403` Forbidden | CSV path outside the allowed directory | `TDB_ALLOWED_DATA_DIR` is set and the `file_path` resolves (symlinks / `..` expanded) outside it. Move the CSV inside that directory, or adjust the variable. In Docker it defaults to `/data`, so register paths as `/data/<file>.csv`. |
+| `404` Not Found | Unknown `source_id` | The id doesn't match a registered source. Re-list with `GET /v1/sources` and copy the current `id` (it changes when you re-register). |
+| `409` Conflict | A source is already registered | Community Edition allows **one source at a time**. `DELETE /v1/sources/{id}` the existing one first, or upgrade to Enterprise for unlimited sources. |
+| `400` Bad Request | Rejected SQL or bad registration | Either the SQL isn't a plain `SELECT` / contains a blocked keyword, or the CSV `file_path` is missing/unreadable at registration time. |
+| `503` Service Unavailable | Source file is gone | The CSV was moved or deleted **after** registration. Restore the file at its registered path, or delete and re-register the source. |
+
+**MCP-specific gotchas:**
+
+- **`type: "stdio"` with a `curl` command won't work.** TDB speaks Streamable HTTP — use
+  `"type": "http"` with the `/v1/mcp` URL (see [Connecting an MCP Client](#connecting-an-mcp-client)). A stdio + curl config produces an immediate `ENOENT`/disconnect.
+- **Handshake works but tools don't.** `initialize` is intentionally unauthenticated, so a
+  reachable server can still reject `tools/list` / `tools/call` with `-32001` if the Bearer
+  key is wrong or missing. Fix the `Authorization` header in your client config.
+
+Still stuck? Turn up detail with `TDB_LOG_LEVEL=DEBUG`, follow logs via `docker logs -f tdb`,
+and check the [audit log](#step-5--check-the-audit-log) to see exactly what SQL reached the server.
 
 ---
 
