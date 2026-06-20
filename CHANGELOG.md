@@ -9,6 +9,10 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **Dependency refresh** (`uv lock --upgrade`) clears the last open Dependabot alert: `msgpack` 1.1.2 → 1.2.1 (GHSA-6v7p-g79w-8964, high). Also refreshes the rest of the locked tree to latest compatible (fastapi, uvicorn, pydantic, duckdb, typer, structlog, etc.). `pip-audit -r requirements.txt` reports no known vulnerabilities; full test suite passes.
+
 ### Documentation
 
 - **README expanded** with: the audit-log NDJSON schema (field-by-field, with a `jq` example); a worked MCP `tools/call` example plus natural-language prompts for querying from VS Code Copilot / Claude Desktop / Cursor; a REST API reference table of all `/v1` endpoints; a Troubleshooting section mapping each HTTP/JSON-RPC status (`401`/`403`/`404`/`409`/`400`/`503`, MCP `-32001`) to its cause and fix; and a corrected read-only SQL note listing the full blocked-keyword set (was understated as four). Docs-only — no behaviour change.
