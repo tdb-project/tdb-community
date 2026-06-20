@@ -9,6 +9,10 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation
+
+- **README expanded** with: the audit-log NDJSON schema (field-by-field, with a `jq` example); a worked MCP `tools/call` example plus natural-language prompts for querying from VS Code Copilot / Claude Desktop / Cursor; a REST API reference table of all `/v1` endpoints; a Troubleshooting section mapping each HTTP/JSON-RPC status (`401`/`403`/`404`/`409`/`400`/`503`, MCP `-32001`) to its cause and fix; and a corrected read-only SQL note listing the full blocked-keyword set (was understated as four). Docs-only — no behaviour change.
+
 ### Changed
 
 - **Version is now defined once** in `src/tdb/__init__.py` (`__version__`) and imported by the FastAPI app version, the `/` banner, and the MCP `serverInfo`. Previously the version string was hardcoded in three places, which risks drift on release. No behaviour change — all three still report `0.4.2`.
