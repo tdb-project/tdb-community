@@ -25,6 +25,7 @@ from tdb.models import (
     SourceSummary,
 )
 from tdb.registry import store
+from tdb.registry.store import get_source_by_ref
 
 router = APIRouter(prefix="/sources", tags=["Source Registry"])
 _log = get_logger(__name__)
@@ -131,13 +132,13 @@ def list_sources(
 @router.get(
     "/{source_id}",
     response_model=SourceRecord,
-    summary="Get details of a specific source",
+    summary="Get details of a specific source (UUID or name)",
 )
 def get_source(
     source_id: str,
     _api_key: str = Depends(require_api_key),
 ) -> SourceRecord:
-    record = store.get_source(source_id)
+    record = get_source_by_ref(source_id)
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -154,19 +155,20 @@ def get_source(
 @router.delete(
     "/{source_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Remove a registered source",
+    summary="Remove a registered source (UUID or name)",
 )
 def delete_source(
     source_id: str,
     _api_key: str = Depends(require_api_key),
 ) -> None:
-    deleted = store.remove_source(source_id)
-    if not deleted:
+    record = get_source_by_ref(source_id)
+    if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Source '{source_id}' not found.",
         )
-    _log.info("source_deleted source_id=%s", source_id)
+    store.remove_source(record.id)
+    _log.info("source_deleted source_id=%s", record.id)
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +179,7 @@ def delete_source(
 @router.get(
     "/{source_id}/schema",
     response_model=SourceSchema,
-    summary="Inspect column names and types for a registered source",
+    summary="Inspect column names and types for a registered source (UUID or name)",
 )
 def get_source_schema(
     source_id: str,
@@ -187,7 +189,7 @@ def get_source_schema(
     Returns the column names and inferred DuckDB types for the registered CSV.
     No rows are returned — schema introspection only.
     """
-    record = store.get_source(source_id)
+    record = get_source_by_ref(source_id)
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

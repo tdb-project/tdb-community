@@ -101,6 +101,19 @@ def get_source(source_id: str) -> SourceRecord | None:
         conn.close()
 
 
+def get_source_by_ref(ref: str) -> SourceRecord | None:
+    """Resolve by UUID (exact match) or by name (case-insensitive)."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM sources WHERE id = ? OR lower(name) = lower(?)",
+            (ref, ref),
+        ).fetchone()
+        return _row_to_record(row) if row else None
+    finally:
+        conn.close()
+
+
 def list_sources() -> list[SourceRecord]:
     conn = get_connection()
     try:
@@ -111,6 +124,7 @@ def list_sources() -> list[SourceRecord]:
 
 
 def remove_source(source_id: str) -> bool:
+    """Delete by UUID only. Callers should resolve names via get_source_by_ref first."""
     conn = get_connection()
     try:
         cursor = conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))

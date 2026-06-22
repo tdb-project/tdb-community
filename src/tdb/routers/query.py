@@ -26,6 +26,7 @@ from tdb.connectors.csv import CsvConnector
 from tdb.engine.validator import validate_sql
 from tdb.models import QueryRequest, QueryResponse
 from tdb.registry import store
+from tdb.registry.store import get_source_by_ref
 
 router = APIRouter(prefix="/query", tags=["Query"])
 _log = get_logger(__name__)
@@ -85,8 +86,8 @@ def run_query(
     """
     key_hint = api_key[:6] + "..." if api_key else ""
 
-    # 1. Resolve source
-    source = store.get_source(body.source_id)
+    # 1. Resolve source (accepts UUID or registered name)
+    source = get_source_by_ref(body.source_id)
     if source is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
