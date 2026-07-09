@@ -342,6 +342,74 @@ Open **Cursor Settings → MCP** and add a new server, or edit `.cursor/mcp.json
 
 ---
 
+### Windsurf (Cascade)
+
+Edit `~/.codeium/windsurf/mcp_config.json`. Windsurf uses `serverUrl`, **not** `url` —
+pasting the Claude Desktop/Cursor block above as-is will silently fail to connect:
+
+```json
+{
+  "mcpServers": {
+    "tdb": {
+      "serverUrl": "http://localhost:8000/v1/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_API_KEY"
+      }
+    }
+  }
+}
+```
+
+Reload Cascade's MCP panel from the Windsurf sidebar to pick up the change.
+
+---
+
+### JetBrains IDEs (IntelliJ, PyCharm, WebStorm, etc.)
+
+Via the **AI Assistant** plugin (2025.2+): **Settings → Tools → AI Assistant →
+Model Context Protocol (MCP) → Add**. JetBrains' documented HTTP config is URL-only —
+there's no documented field for the `Authorization` header:
+
+```json
+{ "mcpServers": { "tdb": { "url": "http://localhost:8000/v1/mcp" } } }
+```
+
+If your IDE's Add dialog has no headers field, add the server as a **command**
+instead, using [`mcp-remote`](https://github.com/geelen/mcp-remote) to inject the
+header over stdio (requires Node.js):
+
+| Field | Value |
+|---|---|
+| Command | `npx` |
+| Arguments | `-y mcp-remote http://localhost:8000/v1/mcp --header "Authorization: Bearer YOUR_API_KEY"` |
+
+---
+
+### Cline (VS Code extension)
+
+Cline sidebar → **MCP Servers → Configure MCP Servers** opens a JSON file. Set
+`"type": "streamableHttp"` explicitly — omitting it makes Cline fall back to the
+deprecated SSE transport, which TDB doesn't speak, and the server will show as
+added but never connect:
+
+```json
+{
+  "mcpServers": {
+    "tdb": {
+      "type": "streamableHttp",
+      "url": "http://localhost:8000/v1/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_API_KEY"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
+```
+
+---
+
 ### Available MCP Tool
 
 The single MCP tool exposed is `query_source`. It accepts:
@@ -397,8 +465,7 @@ The result envelope wraps the rows as JSON text — the inner payload carries
 
 Once the server is configured in your client (see above), you don't write SQL — you ask
 in plain language and the assistant calls `query_source` for you, writing the SQL against
-the `data` table. After connecting in **VS Code (Copilot)**, **Claude Desktop**, or
-**Cursor**, try prompts like:
+the `data` table. After connecting in any of the clients above, try prompts like:
 
 - *"Using the tdb `query_source` tool, how many rows are in my data?"*
 - *"Show me the first 5 rows."*
