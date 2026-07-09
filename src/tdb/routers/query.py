@@ -25,7 +25,6 @@ from tdb.auth.apikey import require_api_key
 from tdb.connectors.csv import CsvConnector
 from tdb.engine.validator import validate_sql
 from tdb.models import QueryRequest, QueryResponse
-from tdb.registry import store
 from tdb.registry.store import get_source_by_ref
 
 router = APIRouter(prefix="/query", tags=["Query"])
