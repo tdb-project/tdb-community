@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from tdb.audit.logger import get_logger
+from tdb.audit.logger import get_logger, log_denial
 from tdb.auth.apikey import require_api_key
 from tdb.connectors.csv import CsvConnector
 from tdb.models import (
@@ -62,16 +62,21 @@ def register_source(
     try:
         connector = CsvConnector(body.connection)
     except ValueError as exc:
+        log_denial(action="register", reason="invalid_connection", key_hint=key_hint)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
     if not connector.path_is_allowed():
+        log_denial(
+            action="register", reason="path_outside_allowed_dir", key_hint=key_hint
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="file_path is outside the allowed data directory.",
         )
     if not connector.validate_connection():
+        log_denial(action="register", reason="file_unreadable", key_hint=key_hint)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
@@ -83,6 +88,7 @@ def register_source(
     try:
         record = store.register_source(body, registered_by=key_hint)
     except ValueError as exc:
+        log_denial(action="register", reason="registry_conflict", key_hint=key_hint)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),

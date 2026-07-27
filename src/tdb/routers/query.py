@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from tdb.audit.logger import get_logger, log_query
+from tdb.audit.logger import get_logger, log_denial, log_query
 from tdb.auth.apikey import require_api_key
 from tdb.connectors.csv import CsvConnector
 from tdb.engine.validator import validate_sql
@@ -88,6 +88,13 @@ def run_query(
     # 1. Resolve source (accepts UUID or registered name)
     source = get_source_by_ref(body.source_id)
     if source is None:
+        log_denial(
+            action="query",
+            reason="source_not_found",
+            source_id=body.source_id,
+            sql=body.sql,
+            key_hint=key_hint,
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Source '{body.source_id}' not found.",
@@ -100,6 +107,13 @@ def run_query(
             "query_rejected — source_id=%s reason=%s",
             body.source_id,
             validation.reason,
+        )
+        log_denial(
+            action="query",
+            reason="sql_validation_failed",
+            source_id=body.source_id,
+            sql=body.sql,
+            key_hint=key_hint,
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -119,6 +133,13 @@ def run_query(
             "query_source_forbidden source_id=%s error=%s",
             body.source_id,
             str(exc),
+        )
+        log_denial(
+            action="query",
+            reason="path_outside_allowed_dir",
+            source_id=body.source_id,
+            sql=body.sql,
+            key_hint=key_hint,
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
