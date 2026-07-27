@@ -9,6 +9,10 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Denied and blocked attempts are now audit events.** Previously only *successful* queries were written to the audit log; anything refused (bad or missing API key, non-`SELECT` SQL, unknown source, a path outside `TDB_ALLOWED_DATA_DIR`, an unreadable CSV at register time, a registry name conflict) was only an app-log warning — so the audit file could not answer "who tried what and was turned away", which is the first question a security reviewer asks. Refusals now write `{"event":"denied","action":…,"reason":…}` alongside the existing `event: "query"` lines, across REST and MCP. Covers `auth`, `query`, `register`, `mcp_auth`, and `mcp_query` actions. Existing `event: "query"` lines are unchanged, so current log consumers keep working — filter on `.event` to separate the two. The raw API key is still never written; denials record the same 6-character `key_hint`. 11 new tests.
+
 ### Security
 
 - **Dependency refresh** (`uv lock --upgrade`) clears the last open Dependabot alert: `msgpack` 1.1.2 → 1.2.1 (GHSA-6v7p-g79w-8964, high). Also refreshes the rest of the locked tree to latest compatible (fastapi, uvicorn, pydantic, duckdb, typer, structlog, etc.). `pip-audit -r requirements.txt` reports no known vulnerabilities; full test suite passes.

@@ -23,7 +23,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from tdb import __version__
-from tdb.audit.logger import get_logger, log_query
+from tdb.audit.logger import get_logger, log_denial, log_query
 from tdb.config import get_api_keys
 from tdb.connectors.csv import CsvConnector
 from tdb.engine.validator import validate_sql
@@ -121,8 +121,16 @@ def _handle_tools_call(request_id: Any, params: dict, api_key: str = "") -> dict
     sql = args.get("sql", "").strip()
     source_name = args.get("source_name")
 
+    key_hint = api_key[:6] + "..." if api_key else ""
+
     validation = validate_sql(sql)
     if not validation.is_valid:
+        log_denial(
+            action="mcp_query",
+            reason="sql_validation_failed",
+            sql=sql,
+            key_hint=key_hint,
+        )
         return _tool_error(request_id, f"SQL validation error: {validation.reason}")
 
     sources = store.list_sources()
@@ -135,6 +143,13 @@ def _handle_tools_call(request_id: Any, params: dict, api_key: str = "") -> dict
         matching = [s for s in sources if s.name == source_name]
         if not matching:
             names = [s.name for s in sources]
+            log_denial(
+                action="mcp_query",
+                reason="source_not_found",
+                source_id=source_name,
+                sql=sql,
+                key_hint=key_hint,
+            )
             return _tool_error(
                 request_id, f"Source '{source_name}' not found. Available: {names}"
             )
@@ -158,7 +173,7 @@ def _handle_tools_call(request_id: Any, params: dict, api_key: str = "") -> dict
         source_id=source.id,
         sql=sql,
         rows_returned=len(result.rows),
-        key_hint=api_key[:6] + "..." if api_key else "",
+        key_hint=key_hint,
     )
 
     return _tool_ok(
@@ -217,6 +232,11 @@ async def mcp_endpoint(request: Request) -> JSONResponse:
         auth_header = request.headers.get("Authorization", "")
         token = auth_header.removeprefix("Bearer ").strip()
         if token not in get_api_keys():
+            log_denial(
+                action="mcp_auth",
+                reason="missing_api_key" if not token else "invalid_api_key",
+                key_hint=token[:6] + "..." if token else "",
+            )
             return JSONResponse(
                 _err(request_id, -32001, "Unauthorized: invalid or missing API key")
             )

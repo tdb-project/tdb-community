@@ -173,23 +173,36 @@ docker exec tdb cat /app/tdb_audit.jsonl | tail -3
 docker exec tdb cat /app/tdb_audit.jsonl | Select-Object -Last 3
 ```
 
-Each line is a self-contained JSON object — one query, one line:
+Each line is a self-contained JSON object — one attempt, one line:
 
 ```json
 {"event":"query","source_id":"3f9c2a7e-…","sql":"SELECT * FROM data LIMIT 10","rows_returned":10,"key_hint":"a1b2c3…","ts":"2026-06-20T12:34:56.789012+00:00"}
+{"event":"denied","action":"query","reason":"sql_validation_failed","source_id":"3f9c2a7e-…","sql":"DROP TABLE data","key_hint":"a1b2c3…","ts":"2026-06-20T12:35:01.114233+00:00"}
 ```
 
 | Field | Meaning |
 |---|---|
-| `event` | Always `"query"` in this edition. |
+| `event` | `"query"` for a query that ran, `"denied"` for an attempt that was refused. |
 | `source_id` | The registered source the query ran against. |
 | `sql` | The exact SQL submitted (REST or via the MCP tool). |
-| `rows_returned` | Row count in the response (after the 1,000-row cap). |
+| `rows_returned` | Row count in the response (after the 1,000-row cap). `"query"` events only. |
 | `key_hint` | First 6 characters of the API key used, then `…`. **The raw key is never written** — this is only enough to tell two keys apart. |
 | `ts` | UTC timestamp, ISO-8601 with a `+00:00` offset so SIEM tools and log parsers place it correctly. |
 
+**Denied attempts are audit events too.** Anything refused — a bad API key, a
+non-`SELECT` statement, an unknown source, a file outside `TDB_ALLOWED_DATA_DIR` —
+writes an `event: "denied"` line rather than disappearing into the app log. Two extra
+fields describe it:
+
+| Field | Meaning |
+|---|---|
+| `action` | What was attempted: `auth`, `query`, `register`, `mcp_auth`, or `mcp_query`. |
+| `reason` | Machine-readable cause — e.g. `invalid_api_key`, `missing_api_key`, `sql_validation_failed`, `source_not_found`, `path_outside_allowed_dir`, `file_unreadable`, `registry_conflict`. |
+
 Because it's newline-delimited JSON, you can stream it straight into `jq`, Loki, or any
 log pipeline — e.g. `docker exec tdb cat /app/tdb_audit.jsonl | jq 'select(.rows_returned > 100)'`.
+To review refused attempts specifically:
+`docker exec tdb cat /app/tdb_audit.jsonl | jq 'select(.event == "denied")'`.
 
 ### Stopping TDB
 
