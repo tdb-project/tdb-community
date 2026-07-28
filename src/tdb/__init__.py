@@ -4,4 +4,4 @@
 # [project] version in pyproject.toml at release time. Imported by main.py
 # (FastAPI app version + root banner) and the MCP router (serverInfo) so the
 # version is never hardcoded in more than one place.
-__version__ = "0.4.2"
+__version__ = "0.4.3"

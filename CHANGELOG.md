@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-07-28
+
 ### Added
 
 - **Denied and blocked attempts are now audit events.** Previously only *successful* queries were written to the audit log; anything refused (bad or missing API key, non-`SELECT` SQL, unknown source, a path outside `TDB_ALLOWED_DATA_DIR`, an unreadable CSV at register time, a registry name conflict) was only an app-log warning — so the audit file could not answer "who tried what and was turned away", which is the first question a security reviewer asks. Refusals now write `{"event":"denied","action":…,"reason":…}` alongside the existing `event: "query"` lines, across REST and MCP. Covers `auth`, `query`, `register`, `mcp_auth`, and `mcp_query` actions. Existing `event: "query"` lines are unchanged, so current log consumers keep working — filter on `.event` to separate the two. The raw API key is still never written; denials record the same 6-character `key_hint`. 11 new tests.
@@ -21,9 +23,13 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **README expanded** with: the audit-log NDJSON schema (field-by-field, with a `jq` example); a worked MCP `tools/call` example plus natural-language prompts for querying from VS Code Copilot / Claude Desktop / Cursor; a REST API reference table of all `/v1` endpoints; a Troubleshooting section mapping each HTTP/JSON-RPC status (`401`/`403`/`404`/`409`/`400`/`503`, MCP `-32001`) to its cause and fix; and a corrected read-only SQL note listing the full blocked-keyword set (was understated as four). Docs-only — no behaviour change.
 
+### Fixed
+
+- **The startup log reported a stale version.** `src/tdb/main.py` still hardcoded `"0.4.2"` in its `tdb_startup version=…` line, missed by the single-source-of-truth refactor below — so on this release the banner would have announced the previous version while every other surface reported the new one. It now uses `__version__` like the rest.
+
 ### Changed
 
-- **Version is now defined once** in `src/tdb/__init__.py` (`__version__`) and imported by the FastAPI app version, the `/` banner, and the MCP `serverInfo`. Previously the version string was hardcoded in three places, which risks drift on release. No behaviour change — all three still report `0.4.2`.
+- **Version is now defined once** in `src/tdb/__init__.py` (`__version__`) and imported by the FastAPI app version, the `/` banner, and the MCP `serverInfo`. Previously the version string was hardcoded in three places, which risks drift on release.
 - **Docker image tag policy now follows release tags, not `main`.** `latest`, `X.Y.Z`, and `X.Y` are published only when a `v*` release tag is cut (so `:latest` always points at the newest stable release and skips pre-releases). Pushes to `main` publish a separate `edge` tag instead of moving `latest`. Pull `:edge` for bleeding-edge builds; pin `:X.Y.Z` (or a digest) for production.
 
 ## [0.4.2] — 2026-06-02
