@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
     dev_mode = "dev-insecure-key-change-me" in os.environ.get(
         "TDB_API_KEYS", "dev-insecure-key-change-me"
     )
-    _log.info("tdb_startup version=%s dev_mode=%s", "0.4.2", dev_mode)
+    _log.info("tdb_startup version=%s dev_mode=%s", __version__, dev_mode)
     if dev_mode:
         print(
             "\n⚠️  WARNING: TDB is running with the default insecure dev API key.\n"
