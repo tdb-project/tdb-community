@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tdb-community"
-version = "0.4.3"
+dynamic = ["version"]
 description = "The Data-Bridge — Turn any data source into a queryable API"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -46,6 +46,9 @@ dev = [
 
 [project.scripts]
 tdb = "tdb.cli.main:app"
+
+[tool.hatch.version]
+path = "src/tdb/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tdb"]
