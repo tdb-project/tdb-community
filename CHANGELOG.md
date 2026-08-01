@@ -9,6 +9,12 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.5] — 2026-08-01
+
+> Patch. Some SQL that was refused with `400 Blocked keyword: …` now runs — an
+> ordinary filter like `WHERE status = 'update pending'`. Nothing that was allowed
+> becomes refused, and nothing that was refused for a real reason becomes allowed.
+
 ### Fixed
 
 - **A write keyword inside a string, comment or quoted identifier is no longer refused
