@@ -9,6 +9,12 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-08-01
+
+> Patch. **No API change** — the same rows and the same `truncated` flag come back
+> from every query. What changes is how much memory the server uses to produce them.
+> Nothing to do on upgrade.
+
 ### Fixed
 
 - **The 1,000-row cap now bounds memory, not just the response.** The cap was enforced
