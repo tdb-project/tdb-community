@@ -9,6 +9,22 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A write keyword inside a string, comment or quoted identifier is no longer refused
+  as a write.** The read-only check scanned the raw SQL, so
+  `WHERE status = 'update pending'` came back `400 Blocked keyword: update` — and since
+  0.4.3 the refusal was written to the audit log as a denial, making an ordinary filter
+  look like an attempted write. String literals, `--` and `/* */` comments, and quoted
+  identifiers are now excluded from the scan.
+
+  The masking is deliberately conservative, because it guards a security check: an
+  unterminated quote or comment leaves the rest of the statement visible to the scan,
+  backslash is not treated as an escape (standard SQL rules, so nothing is hidden on
+  PostgreSQL), MySQL's executable `/*! ... */` comments are treated as code, and T-SQL
+  `[identifier]` brackets are not treated as quoting. Every existing refusal still
+  refuses — `SELECT 'a'; DROP TABLE t` included.
+
 ## [0.4.4] — 2026-08-01
 
 > Patch. **No API change** — the same rows and the same `truncated` flag come back
