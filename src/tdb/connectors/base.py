@@ -47,5 +47,9 @@ class BaseConnector(ABC):
     def execute(self, sql: str, limit: int = 100) -> ConnectorResult:
         """
         Run a read-only SQL SELECT and return a ConnectorResult.
-        The connector is responsible for enforcing the limit.
+
+        The connector is responsible for enforcing the limit, and must do so by
+        bounding the fetch — read at most ``limit + 1`` rows. An injected LIMIT
+        cannot be relied on: the injector skips any query already containing
+        the token. The extra row is what marks the result ``truncated``.
         """
