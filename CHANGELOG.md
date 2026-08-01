@@ -9,6 +9,16 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The 1,000-row cap now bounds memory, not just the response.** The cap was enforced
+  by reading the query's entire result out of DuckDB and slicing it — the response was
+  always correct, but a query the injector could not cap (`SELECT … LIMIT 99999`, or one
+  that merely contains the word, e.g. `WHERE note = 'no limit'`) turned every row it
+  produced into Python objects first. On a 200,000-row CSV that is **30.9 MB for a
+  ten-row answer; it is now 0.01 MB**, because the connector reads at most `limit + 1`
+  rows. No API change — same rows, same `truncated` flag.
+
 ## [0.4.3] — 2026-07-28
 
 ### Added

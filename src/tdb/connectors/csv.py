@@ -105,14 +105,17 @@ class CsvConnector(BaseConnector):
             conn.register("data", conn.read_csv(self._file_path))
             cursor = conn.execute(sql_to_run)
             columns = [desc[0] for desc in cursor.description]
-            rows_raw = cursor.fetchall()
+            # fetchmany, not fetchall: the community edition guarantees "max
+            # `limit` rows per response", and _inject_limit only adds a LIMIT
+            # when the token is absent — so a user-supplied `LIMIT 99999`, or a
+            # query that merely contains the word, would otherwise turn every
+            # row the query produced into Python objects before being sliced.
+            rows_raw = cursor.fetchmany(limit + 1)
         finally:
             conn.close()
 
-        # Always enforce the row cap, even when the SQL carries its own LIMIT.
-        # The community edition guarantees "max `limit` rows per response" — a
-        # user-supplied `LIMIT 99999` must never exceed it. _inject_limit only
-        # adds a LIMIT when one is absent, so this slice is the real ceiling.
+        # One row beyond the ceiling is what distinguishes a cut result from a
+        # complete one.
         truncated = len(rows_raw) > limit
         rows_raw = rows_raw[:limit]
 
