@@ -57,9 +57,7 @@ class TestP1RowCapBoundsTheFetch:
         assert len(result.rows) == 10
         assert result.truncated is True
 
-    def test_result_under_the_cap_is_not_marked_truncated(
-        self, tmp_path: Path
-    ) -> None:
+    def test_result_under_the_cap_is_not_marked_truncated(self, tmp_path: Path) -> None:
         c = CsvConnector(connection={"file_path": _csv(tmp_path, 3)})
         result = c.execute("SELECT * FROM data", limit=10)
         assert len(result.rows) == 3
@@ -130,9 +128,7 @@ class TestP4RefusalsAreAudited:
             json={"source_id": created.json()["id"], "sql": "DROP TABLE data"},
         )
         entries = [
-            json.loads(ln)
-            for ln in Path(get_log_file()).read_text().splitlines()
-            if ln
+            json.loads(ln) for ln in Path(get_log_file()).read_text().splitlines() if ln
         ]
         denied = [e for e in entries if e.get("event") == "denied"]
         assert denied
