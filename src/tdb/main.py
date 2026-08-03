@@ -23,6 +23,7 @@ from fastapi.responses import JSONResponse
 from tdb import __version__
 from tdb.audit.logger import get_logger
 from tdb.config import get_log_level
+from tdb.connectors.csv import close_engine as close_csv_engine
 from tdb.registry.migrations import run_migrations
 from tdb.routers.mcp import router as mcp_router
 from tdb.routers.query import router as query_router
@@ -51,7 +52,8 @@ async def lifespan(app: FastAPI):
             "   Set  TDB_API_KEYS=your-secret-key  before exposing to a network.\n"
         )
     yield
-    # shutdown: nothing to release in community edition
+    # Shutdown: release the shared DuckDB engine the CSV connector runs on.
+    close_csv_engine()
 
 
 # ---------------------------------------------------------------------------
