@@ -9,7 +9,32 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.4.5] — 2026-08-01
+## [0.4.6] — 2026-08-03
+
+> Patch, performance only. No API, config or behaviour change. If you have ever
+> found TDB slow under more than one or two simultaneous queries, this is why.
+
+### Fixed
+
+- **The CSV connector built and destroyed a whole DuckDB engine on every query.**
+  A single query was fine (~228 ms on a 5.4 MB file), but **throughput fell as load
+  rose** — it peaked at two concurrent queries and dropped 12× from there, to
+  0.35 req/s at sixteen. The server got slower, in absolute terms, the more it was
+  asked to do.
+
+  Three causes compounded. Creating and closing the engine cost 70–130 ms per query
+  regardless of file size — on a small CSV, more time than the query itself. The
+  file was fully re-parsed every time. And DuckDB claims one thread per CPU core,
+  so every concurrent query had its own engine doing that: sixteen queries on a
+  six-core host meant 96 threads competing for 6 cores.
+
+  Queries now share one engine, each on its own cursor. Measured on the same
+  5.4 MB file: **228 ms → 131 ms** for a single query, and at sixteen concurrent
+  queries **50.9 s → 317 ms** (0.35 → 28.1 req/s). On a 55.8 MB file, 24 queries
+  at that concurrency went from 46.7 s to 1.75 s, with memory use unchanged.
+
+  Nothing about your file is cached: rows you append, and columns you add or
+  remove, are still picked up on the next query.
 
 > Patch. Some SQL that was refused with `400 Blocked keyword: …` now runs — an
 > ordinary filter like `WHERE status = 'update pending'`. Nothing that was allowed
