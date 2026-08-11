@@ -371,3 +371,42 @@ class TestRowLimitEnforcement:
         body = r.json()
         assert body["rows_returned"] == 5
         assert body["truncated"] is False
+
+
+class TestRegistryStartupError:
+    """An unopenable registry must fail with an error that explains itself.
+
+    The install docs' `-v ./data:/app/data` with no prior mkdir makes Docker
+    create a root-owned host dir; the non-root container user then cannot open
+    the SQLite file, and startup died with SQLite's bare "unable to open
+    database file" — no path, no cause (e2e 2026-08-11). The wrapper names the
+    path, the uid, and the fix.
+    """
+
+    def test_unwritable_registry_dir_names_path_and_fix(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        import importlib
+        import sys
+
+        import pytest as _pytest
+
+        locked = tmp_path / "data"
+        locked.mkdir()
+        monkeypatch.setenv("TDB_REGISTRY_DB", str(locked / "registry.db"))
+        locked.chmod(0o555)
+        try:
+            for mod in [m for m in sys.modules if m.startswith("tdb")]:
+                del sys.modules[mod]
+            migrations = importlib.import_module("tdb.registry.migrations")
+            with _pytest.raises(RuntimeError) as exc:
+                migrations.run_migrations()
+        finally:
+            locked.chmod(0o755)
+            for mod in [m for m in sys.modules if m.startswith("tdb")]:
+                del sys.modules[mod]
+
+        msg = str(exc.value)
+        assert str(locked / "registry.db") in msg
+        assert "mkdir" in msg
+        assert "root" in msg

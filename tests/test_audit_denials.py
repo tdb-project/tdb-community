@@ -193,3 +193,50 @@ class TestMcpDenials:
         assert len(denied) == 1
         assert denied[0]["action"] == "mcp_query"
         assert denied[0]["reason"] == "sql_validation_failed"
+
+
+class TestAuditSourceIdIsTheUuid:
+    """The audit trail's source_id is the registered source's UUID, whatever
+    ref the caller used — a by-name query must not be invisible to a by-UUID
+    grep (e2e pass 2026-08-11)."""
+
+    def _register(self, sample_csv: str) -> str:
+        r = client.post(
+            "/v1/sources",
+            headers=HEADERS,
+            json={
+                "name": "uuid_check",
+                "source_type": "csv",
+                "connection": {"file_path": sample_csv},
+            },
+        )
+        assert r.status_code == 201, r.text
+        return r.json()["id"]
+
+    def test_query_by_name_logs_the_uuid(self, sample_csv, audit_lines) -> None:
+        uuid = self._register(sample_csv)
+
+        r = client.post(
+            "/v1/query",
+            headers=HEADERS,
+            json={"source_id": "uuid_check", "sql": "SELECT * FROM data", "limit": 5},
+        )
+
+        assert r.status_code == 200, r.text
+        assert audit_lines()[-1]["source_id"] == uuid
+
+    def test_denial_after_resolution_logs_the_uuid(
+        self, sample_csv, audit_lines
+    ) -> None:
+        uuid = self._register(sample_csv)
+
+        r = client.post(
+            "/v1/query",
+            headers=HEADERS,
+            json={"source_id": "uuid_check", "sql": "DROP TABLE data", "limit": 5},
+        )
+
+        assert r.status_code == 400
+        entry = audit_lines()[-1]
+        assert entry["reason"] == "sql_validation_failed"
+        assert entry["source_id"] == uuid

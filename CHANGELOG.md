@@ -9,6 +9,26 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`truncated:false` no longer claims completeness for a cut result.** With no
+  `LIMIT` in your SQL, TDB injected `LIMIT <limit>`, the source returned exactly
+  `limit` rows, and the flag could never become `true` — a 1,500-row CSV queried
+  with `limit: 1000` returned 1,000 rows and `truncated: false`, while the docs
+  say the flag means "you received the whole result". A client trusting that —
+  including an AI agent deciding whether it has the full answer — silently lost
+  rows. The injection now passes `limit + 1` so the sentinel row that sets the
+  flag can come back. Asserted as parity invariant **P7**.
+- **The audit trail's `source_id` is now the source's UUID.** Queries made by
+  source name logged the name, so grepping the trail by UUID missed them.
+  Post-resolution entries record the UUID; a `source_not_found` denial still
+  records the unresolvable ref, since the bad ref is the information.
+- **An unopenable registry now fails startup with an error that explains
+  itself** — naming the database path, the container uid, and the bind-mount fix
+  (`mkdir -p data` before `docker run`), instead of SQLite's bare "unable to
+  open database file".
+
+
 ## [0.4.6] — 2026-08-03
 
 > Patch, performance only. No API, config or behaviour change. If you have ever

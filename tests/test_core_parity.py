@@ -163,3 +163,31 @@ class TestP6QueryTimeout:
     )
     def test_the_timeout_is_configurable_and_defaults_on(self) -> None:
         raise AssertionError("unreachable — skipped above")
+
+
+class TestP7TruncatedMeansRowsWereWithheld:
+    """P7 — `truncated:false` is a completeness claim (e2e pass, 2026-08-11).
+
+    The docs promise that `truncated:false` means "you received the whole
+    result". For the product's whole life that was false on the most ordinary
+    path: SQL with no LIMIT of its own was injected with `LIMIT <limit>`, the
+    source returned exactly `limit` rows, and the len>limit sentinel check
+    could never fire — a 5-row table queried with limit=2 returned 2 rows and
+    `truncated:false`. An AI agent following the documented warning box then
+    treats a cut result as complete and silently loses rows. The injection now
+    passes limit+1 so the sentinel row can come back.
+    """
+
+    def test_injected_limit_still_reports_truncation(self, tmp_path: Path) -> None:
+        c = CsvConnector(connection={"file_path": _csv(tmp_path, 5)})
+        result = c.execute("SELECT * FROM data", limit=2)
+        assert len(result.rows) == 2
+        assert result.truncated is True
+
+    def test_exact_fit_is_not_marked_truncated(self, tmp_path: Path) -> None:
+        """limit == row count must stay false — the sentinel row must be the
+        row BEYOND the ceiling, not the last row of a complete result."""
+        c = CsvConnector(connection={"file_path": _csv(tmp_path, 4)})
+        result = c.execute("SELECT * FROM data", limit=4)
+        assert len(result.rows) == 4
+        assert result.truncated is False

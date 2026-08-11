@@ -155,7 +155,13 @@ class CsvConnector(BaseConnector):
                 f"CSV file not found or not readable: {self._file_path}"
             )
 
-        sql_to_run = _inject_limit(sql, limit)
+        # limit + 1, not limit: the fetch below reads one row beyond the
+        # ceiling to set `truncated`, so the injected LIMIT must let that
+        # sentinel row through. Injecting exactly `limit` capped the source at
+        # the ceiling and made `truncated` unreachable on this path — a 5-row
+        # table queried with limit=2 returned 2 rows and truncated:false,
+        # while the docs promise the flag means "you got everything".
+        sql_to_run = _inject_limit(sql, limit + 1)
 
         # A cursor on the shared engine, not a new engine. The registration is
         # cursor-local, so concurrent queries against different sources can each
