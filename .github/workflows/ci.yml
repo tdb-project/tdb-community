@@ -36,6 +36,12 @@ jobs:
       - name: Python SAST (bandit)
         run: uv run bandit -r src/ -ll
 
+      - name: Check CHANGELOG documents the current version
+        # Silent during ordinary work — __version__ still points at the last
+        # released version — and fires the moment a release bump lands without
+        # a changelog entry.
+        run: uv run python scripts/check_changelog.py
+
       - name: Run tests
         # No env vars needed — tests/conftest.py sets TDB_API_KEYS,
         # TDB_REGISTRY_DB, and TDB_LOG_FILE before any tdb.* import.
