@@ -9,6 +9,13 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.7] — 2026-08-11
+
+> Patch. The visible change: `truncated` can now be `true` on queries with no
+> `LIMIT` of their own — meaning the flag does its documented job for the first
+> time. If your tooling treats `truncated:false` as "complete result", it can
+> now actually rely on that.
+
 ### Fixed
 
 - **`truncated:false` no longer claims completeness for a cut result.** With no
