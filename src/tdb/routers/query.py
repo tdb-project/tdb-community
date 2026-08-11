@@ -111,7 +111,9 @@ def run_query(
         log_denial(
             action="query",
             reason="sql_validation_failed",
-            source_id=body.source_id,
+            # The chain's source_id is the stable UUID, whatever ref the caller
+            # used — the docs promise the trail can be grepped by UUID.
+            source_id=source.id,
             sql=body.sql,
             key_hint=key_hint,
         )
@@ -137,7 +139,9 @@ def run_query(
         log_denial(
             action="query",
             reason="path_outside_allowed_dir",
-            source_id=body.source_id,
+            # The chain's source_id is the stable UUID, whatever ref the caller
+            # used — the docs promise the trail can be grepped by UUID.
+            source_id=source.id,
             sql=body.sql,
             key_hint=key_hint,
         )
@@ -184,7 +188,7 @@ def run_query(
         len(body.sql),
     )
     log_query(
-        source_id=body.source_id,
+        source_id=source.id,
         sql=body.sql,
         rows_returned=len(result.rows),
         key_hint=key_hint,
