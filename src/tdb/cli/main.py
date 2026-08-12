@@ -34,6 +34,20 @@ app = typer.Typer(
 console = Console()
 err = Console(stderr=True)
 
+_OUTPUT_FORMATS = frozenset({"table", "json", "csv"})
+
+
+def _cell(value: object) -> str:
+    """Render one table cell.
+
+    NULL prints blank rather than "None". `str(None)` is the string "None",
+    which is indistinguishable from a column that genuinely contains that text —
+    and an empty cell in a CSV is the ordinary way a NULL arrives. Blank matches
+    both `--output csv` and psql's default. Use `--output json` when null and the
+    empty string have to be told apart; that is the only format that can.
+    """
+    return "" if value is None else str(value)
+
 
 # ---------------------------------------------------------------------------
 # tdb serve
@@ -201,6 +215,13 @@ def query(
     rows: list[dict] = data["rows"]
     columns: list[str] = data["columns"]
 
+    if output not in _OUTPUT_FORMATS:
+        err.print(
+            f"[red]Unknown output format: {output}[/red]\n"
+            f"[yellow]Valid formats: {', '.join(sorted(_OUTPUT_FORMATS))}[/yellow]"
+        )
+        raise typer.Exit(1)
+
     if output == "json":
         console.print_json(json.dumps(rows, default=str))
 
@@ -216,6 +237,6 @@ def query(
         for col in columns:
             table.add_column(col)
         for row in rows:
-            table.add_row(*[str(row.get(c, "")) for c in columns])
+            table.add_row(*[_cell(row.get(c)) for c in columns])
         console.print(table)
         console.print(f"\n[dim]{data['rows_returned']} row(s) returned[/dim]")
