@@ -9,6 +9,28 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`tdb query` no longer prints `None` for a NULL.** The table renderer used
+  `str(row.get(col, ""))`, whose `""` default never applied — the column key is
+  always present — so a NULL became the string `None`, indistinguishable from a
+  column whose value genuinely is that text. An empty cell in your CSV is the
+  ordinary way a NULL arrives, so a blank cell and the literal text `None`
+  rendered identically. `--output json` and `--output csv` were already correct,
+  making the default table format the only affected one. NULL now renders blank,
+  matching `--output csv` and psql's default; use `--output json` when `null` and
+  the empty string have to be told apart — it is the only format that can.
+- **An unrecognised `--output` is now an error rather than a table.** `-o jsn`
+  exited 0 with table output, so a script asking for the wrong format received
+  plausible-looking data instead of a failure. It now exits 1 and names the
+  valid formats.
+
+### Changed
+
+- `src/tdb/cli` has tests for the first time — 0% to 84% coverage. Both bugs
+  above were found by running the commands, not by reading them.
+
+
 ## [0.4.7] — 2026-08-11
 
 > Patch. The visible change: `truncated` can now be `true` on queries with no
