@@ -9,6 +9,12 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.8] — 2026-08-30
+
+> Patch: two `tdb query` display fixes. A NULL now renders as a blank cell
+> instead of the word `None`, and asking for an output format that does not
+> exist fails instead of quietly printing a table.
+
 ### Fixed
 
 - **`tdb query` no longer prints `None` for a NULL.** The table renderer used
