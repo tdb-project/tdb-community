@@ -255,9 +255,17 @@ class TestQueryErrors:
 
         assert result.exit_code == 1
 
-    def test_limit_is_capped_at_1000(self, registered, monkeypatch) -> None:
-        """The CLI caps before sending. Community's ceiling is 1,000 and a larger
-        ``--limit`` must not reach the server and come back a 400."""
+    def test_limit_is_sent_as_given_and_the_server_rejects_it(
+        self, registered, monkeypatch
+    ) -> None:
+        """The CLI no longer caps; the ceiling is the server's.
+
+        It used to send ``min(limit, 1000)``, so ``--limit 5000`` quietly
+        returned 1,000 rows that looked like the whole answer. A cap in the
+        client could never be authoritative anyway — REST and MCP callers never
+        run this code — and here it is enforced by ``QueryRequest.limit``'s
+        ``le=1_000``, which *is* the tier boundary.
+        """
         seen: dict = {}
         real = httpx.Client.post
 
@@ -271,8 +279,86 @@ class TestQueryErrors:
             registered, ["query", "SELECT id FROM data", "--limit", "5000"]
         )
 
+        assert seen["limit"] == 5000, "the CLI must not clamp before sending"
+        assert result.exit_code == 1
+        assert "Query failed (422)" in result.output
+
+    def test_the_422_is_legible_not_a_python_list(self, registered) -> None:
+        """A 422 ``detail`` is a *list of dicts*, not a string.
+
+        Rendering it raw hands the caller a Python repr instead of a reason.
+        This is the one thing the no-cap change had to bring with it.
+        """
+        result = runner.invoke(
+            registered, ["query", "SELECT id FROM data", "--limit", "5000"]
+        )
+
+        assert "[{" not in result.output, "the raw list repr leaked into output"
+        assert "limit" in result.output
+        assert "1000" in result.output.replace(",", "")
+
+
+class TestSourceSelection:
+    """``--source`` exists for enterprise, where many sources are normal.
+
+    Community enforces one source at a time (`registry/store.py:42` raises once
+    a source exists), so the *ambiguous* branch is unreachable here — it is
+    asserted in the enterprise suite instead. What matters on this side is that
+    the option works and that the single-source default is unchanged.
+    """
+
+    def test_source_by_name_is_accepted(self, registered) -> None:
+        result = runner.invoke(
+            registered, ["query", "SELECT id FROM data", "--source", "sales"]
+        )
+
         assert result.exit_code == 0, result.output
-        assert seen["limit"] == 1000
+        assert "3 row(s) returned" in result.output
+
+    def test_source_by_uuid_is_accepted(self, registered) -> None:
+        """The server resolves either form, so the CLI sends the string as given
+        and does no resolution of its own."""
+        from tdb.registry import store
+
+        sid = store.list_sources()[0].id
+        result = runner.invoke(
+            registered, ["query", "SELECT id FROM data", "--source", sid]
+        )
+
+        assert result.exit_code == 0, result.output
+
+    def test_an_explicit_source_skips_the_sources_listing(
+        self, registered, monkeypatch
+    ) -> None:
+        """Naming the source means there is nothing to look up — one fewer round
+        trip, and it works with a key that cannot list sources."""
+        calls: list[str] = []
+        real = httpx.Client.get
+
+        def spy(self, url, **kwargs):
+            calls.append(str(url))
+            return real(self, url, **kwargs)
+
+        monkeypatch.setattr(httpx.Client, "get", spy)
+        result = runner.invoke(
+            registered, ["query", "SELECT id FROM data", "--source", "sales"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "/v1/sources" not in calls
+
+    def test_omitting_source_still_works_with_one_registered(self, registered) -> None:
+        result = runner.invoke(registered, ["query", "SELECT id FROM data"])
+
+        assert result.exit_code == 0, result.output
+
+    def test_an_unknown_source_is_refused_by_the_server(self, registered) -> None:
+        result = runner.invoke(
+            registered, ["query", "SELECT id FROM data", "--source", "nope"]
+        )
+
+        assert result.exit_code == 1
+        assert "Query failed" in result.output
 
 
 class TestMissingApiKey:
@@ -338,3 +424,98 @@ class TestServe:
         runner.invoke(cli_app, ["serve", "--reload"])
 
         assert captured["reload"] is True
+
+
+class TestErrorDetail:
+    """`_error_detail` renders whatever shape the server sent.
+
+    FastAPI returns a string `detail` for an `HTTPException` and a **list of
+    validation dicts** for a 422. The CLI used to call `.get("detail")` and
+    interpolate the result, so the 422 path printed a Python list repr — which
+    is what an over-ceiling `--limit` produces in the community build.
+    """
+
+    @staticmethod
+    def _resp(payload, *, text="raw body", raises=False):
+        class _R:
+            @property
+            def text(self):
+                return text
+
+            def json(self):
+                if raises:
+                    raise ValueError("not json")
+                return payload
+
+        return _R()
+
+    def test_a_string_detail_passes_through(self) -> None:
+        from tdb.cli.main import _error_detail
+
+        assert _error_detail(self._resp({"detail": "limit too large"})) == (
+            "limit too large"
+        )
+
+    def test_a_422_list_becomes_one_readable_line(self) -> None:
+        from tdb.cli.main import _error_detail
+
+        out = _error_detail(
+            self._resp(
+                {
+                    "detail": [
+                        {
+                            "loc": ["body", "limit"],
+                            "msg": "Input should be less than or equal to 1000",
+                        }
+                    ]
+                }
+            )
+        )
+
+        assert out == "limit: Input should be less than or equal to 1000"
+        assert "[{" not in out
+
+    def test_several_validation_errors_are_joined(self) -> None:
+        from tdb.cli.main import _error_detail
+
+        out = _error_detail(
+            self._resp(
+                {
+                    "detail": [
+                        {"loc": ["body", "limit"], "msg": "too large"},
+                        {"loc": ["body", "sql"], "msg": "too short"},
+                    ]
+                }
+            )
+        )
+
+        assert out == "limit: too large; sql: too short"
+
+    def test_a_list_of_non_dicts_still_renders(self) -> None:
+        from tdb.cli.main import _error_detail
+
+        assert _error_detail(self._resp({"detail": ["boom", "bang"]})) == "boom; bang"
+
+    def test_unparseable_body_falls_back_to_text(self) -> None:
+        from tdb.cli.main import _error_detail
+
+        assert _error_detail(
+            self._resp(None, text="<html>502</html>", raises=True)
+        ) == ("<html>502</html>")
+
+    def test_a_non_dict_payload_falls_back_to_text(self) -> None:
+        from tdb.cli.main import _error_detail
+
+        assert (
+            _error_detail(self._resp(["unexpected"], text="body here")) == "body here"
+        )
+
+    def test_a_detail_of_another_type_is_stringified(self) -> None:
+        from tdb.cli.main import _error_detail
+
+        assert _error_detail(self._resp({"detail": {"code": 7}})) == "{'code': 7}"
+
+    def test_no_detail_key_falls_back_to_text(self) -> None:
+        from tdb.cli.main import _error_detail
+
+        assert _error_detail(self._resp({"other": 1}, text="fallback")) == "fallback"

@@ -9,6 +9,28 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`tdb query --source` (`-s`)** names the source to query, by registered name
+  or UUID. The server resolves either form, so the CLI sends what you typed and
+  does no lookup of its own — and when you name a source it skips the
+  `GET /v1/sources` call entirely, which also means the command works with a key
+  that cannot list sources. Omitting it is unchanged while one source is
+  registered, which in this edition is always.
+
+### Changed
+
+- **`tdb query --limit` is no longer capped by the CLI before sending.** It used
+  to send `min(limit, 1000)`, so `--limit 5000` quietly returned 1,000 rows that
+  looked like the complete answer. The ceiling is the server's — it has to be,
+  since REST and MCP callers never run the CLI — and a request above it is now
+  refused rather than silently shortened. **If you passed a `--limit` above
+  1,000 you will now see an error where you previously got 1,000 rows.**
+- **A server error with a structured body now prints as a sentence.** The CLI
+  interpolated `detail` directly, which is a string for most errors but a list
+  of validation entries for a 422 — the response an over-ceiling `--limit`
+  produces. That printed as a raw Python list.
+
 ## [0.4.8] — 2026-08-30
 
 > Patch: two `tdb query` display fixes. A NULL now renders as a blank cell

@@ -49,6 +49,38 @@ def _cell(value: object) -> str:
     return "" if value is None else str(value)
 
 
+def _error_detail(response) -> str:
+    """The server's error message, as a readable line.
+
+    FastAPI's ``detail`` is a string for an ``HTTPException`` but a **list of
+    validation dicts** for a 422 — which is what a `--limit` above the edition's
+    ceiling returns here. Printing that list raw gives the caller a Python repr
+    instead of a reason.
+    """
+    try:
+        payload = response.json()
+    except ValueError:
+        return response.text
+    if not isinstance(payload, dict):
+        return response.text
+    detail = payload.get("detail", response.text)
+    if isinstance(detail, str):
+        return detail
+    if isinstance(detail, list):
+        parts = []
+        for item in detail:
+            if isinstance(item, dict):
+                loc = ".".join(str(x) for x in item.get("loc", []) if x != "body")
+                msg = str(item.get("msg", "")).strip()
+                parts.append(f"{loc}: {msg}" if loc and msg else (msg or loc))
+            else:
+                parts.append(str(item))
+        joined = "; ".join(p for p in parts if p)
+        if joined:
+            return joined
+    return str(detail)
+
+
 # ---------------------------------------------------------------------------
 # tdb serve
 # ---------------------------------------------------------------------------
@@ -160,7 +192,15 @@ def query(
     sql: str = typer.Argument(
         ..., help="SQL SELECT statement. Use 'data' as the table name."
     ),
-    limit: int = typer.Option(100, "--limit", "-l", help="Max rows (max 1000)"),
+    source: str | None = typer.Option(
+        None,
+        "--source",
+        "-s",
+        help="Source name or UUID. Optional while only one source is registered.",
+    ),
+    limit: int = typer.Option(
+        100, "--limit", "-l", help="Max rows. The server enforces the ceiling."
+    ),
     output: str = typer.Option(
         "table", "--output", "-o", help="Output format: table | json | csv"
     ),
@@ -174,41 +214,61 @@ def query(
         tdb query "SELECT * FROM data LIMIT 10"
         tdb query "SELECT country, COUNT(*) FROM data GROUP BY country" --output json
     """
-    try:
-        with make_client() as client:
-            sources_resp = client.get("/v1/sources")
-    except RuntimeError as exc:
-        err.print(f"[red]{exc}[/red]")
-        raise typer.Exit(1)
-    except Exception as exc:
-        err.print(f"[red]Could not connect to TDB at {get_base_url()}: {exc}[/red]")
-        raise typer.Exit(1)
+    # An explicit --source is sent as given: the server resolves a name or a
+    # UUID, so there is nothing to look up first and the sources listing is
+    # skipped entirely — one fewer round trip, and it works with a key that has
+    # no permission to list.
+    if source is not None:
+        source_id = source
+    else:
+        try:
+            with make_client() as client:
+                sources_resp = client.get("/v1/sources")
+        except RuntimeError as exc:
+            err.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1)
+        except Exception as exc:
+            err.print(f"[red]Could not connect to TDB at {get_base_url()}: {exc}[/red]")
+            raise typer.Exit(1)
 
-    if sources_resp.status_code != 200:
-        err.print(f"[red]Error listing sources: {sources_resp.text}[/red]")
-        raise typer.Exit(1)
+        if sources_resp.status_code != 200:
+            err.print(f"[red]Error listing sources: {sources_resp.text}[/red]")
+            raise typer.Exit(1)
 
-    sources = sources_resp.json()
-    if not sources:
-        err.print("[red]No sources registered. Use 'tdb register' first.[/red]")
-        raise typer.Exit(1)
+        sources = sources_resp.json()
+        if not sources:
+            err.print("[red]No sources registered. Use 'tdb register' first.[/red]")
+            raise typer.Exit(1)
+        if len(sources) > 1:
+            # Picking the first would answer a question the caller did not ask,
+            # and the answer would look exactly like the right one.
+            names = ", ".join(str(s.get("name", s.get("id"))) for s in sources)
+            err.print(
+                f"[red]{len(sources)} sources registered — name one with "
+                f"--source.[/red]\n[yellow]Registered: {names}[/yellow]"
+            )
+            raise typer.Exit(1)
 
-    source_id = sources[0]["id"]
-    capped_limit = min(limit, 1000)
+        source_id = sources[0]["id"]
 
+    # No client-side cap. The ceiling is the server's (and it must be, since REST
+    # and MCP callers never reach this code); clamping here would silently return
+    # a short result that looks complete.
     try:
         with make_client() as client:
             response = client.post(
                 "/v1/query",
-                json={"source_id": source_id, "sql": sql, "limit": capped_limit},
+                json={"source_id": source_id, "sql": sql, "limit": limit},
             )
     except Exception as exc:
         err.print(f"[red]Query request failed: {exc}[/red]")
         raise typer.Exit(1)
 
     if response.status_code != 200:
-        detail = response.json().get("detail", response.text)
-        err.print(f"[red]Query failed ({response.status_code}): {detail}[/red]")
+        err.print(
+            f"[red]Query failed ({response.status_code}): "
+            f"{_error_detail(response)}[/red]"
+        )
         raise typer.Exit(1)
 
     data = response.json()
