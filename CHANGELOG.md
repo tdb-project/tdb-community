@@ -9,6 +9,12 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-08-30
+
+> Minor: `tdb query` gains `--source`, and stops capping `--limit` before
+> sending. **Two behaviour changes** — a `--limit` above 1,000 is now an error
+> rather than a quietly shortened result.
+
 ### Added
 
 - **`tdb query --source` (`-s`)** names the source to query, by registered name
