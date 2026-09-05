@@ -9,6 +9,23 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **CTEs (`WITH … SELECT`) are accepted.** `validate_sql()` required a statement
+  to *start* with `SELECT`, so every common table expression was refused with
+  400 — standard, read-only SQL. The guard was doing no write-protection work
+  for `WITH`: the blocked-keyword scan runs first and ignores the opening token,
+  so `WITH w AS (INSERT … RETURNING *) SELECT * FROM w` was already refused, and
+  still is (`Blocked keyword: INSERT`). Recursive CTEs included.
+- **A leading comment no longer causes a rejection.** `/* note */ SELECT 1` and
+  a leading `--` line comment were both refused. The opening token is now read
+  off the masked SQL, which already blanks comments for the keyword scan.
+- The rejection message for a bad opening token is now
+  `Only SELECT and WITH statements are allowed`.
+
+Unchanged and still open: semicolon-separated statements are accepted and only
+the last result set is returned.
+
 ## [0.5.0] — 2026-08-30
 
 > Minor: `tdb query` gains `--source`, and stops capping `--limit` before
