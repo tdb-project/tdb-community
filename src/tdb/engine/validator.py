@@ -33,6 +33,11 @@ _COMMENTS = (("--", "\n"), ("/*", "*/"))
 # book, so they are treated as code.
 _EXECUTABLE_COMMENT = "/*!"
 
+# Openers a read-only statement may start with. `WITH` covers CTEs, including
+# `WITH RECURSIVE`; see decisions/cte-support-in-validate-sql.md for why letting
+# it through widens nothing.
+_ALLOWED_PREFIXES = ("select", "with")
+
 
 @dataclass
 class ValidationResult:
@@ -121,15 +126,23 @@ def validate_sql(sql: str) -> ValidationResult:
     if not stripped:
         return ValidationResult(is_valid=False, reason="Empty SQL")
 
-    match = _BLOCKED_PATTERN.search(_mask_noncode(stripped))
+    masked = _mask_noncode(stripped)
+
+    match = _BLOCKED_PATTERN.search(masked)
     if match:
         return ValidationResult(
             is_valid=False, reason=f"Blocked keyword: {match.group(0)}"
         )
 
-    if not stripped.lower().lstrip().startswith("select"):
+    # The prefix is read off the *masked* text, so a statement opening with a
+    # comment is judged by the SQL that follows it rather than by the comment.
+    # `WITH` is accepted because the scan above is what refuses a data-modifying
+    # CTE — it runs first and ignores the opening token, so every writing `WITH`
+    # is already gone by this line. Rejecting the prefix only ever refused the
+    # read-only ones.
+    if not masked.lstrip().lower().startswith(_ALLOWED_PREFIXES):
         return ValidationResult(
-            is_valid=False, reason="Only SELECT statements are allowed"
+            is_valid=False, reason="Only SELECT and WITH statements are allowed"
         )
 
     return ValidationResult(is_valid=True)

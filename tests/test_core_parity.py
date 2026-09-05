@@ -191,3 +191,52 @@ class TestP7TruncatedMeansRowsWereWithheld:
         result = c.execute("SELECT * FROM data", limit=4)
         assert len(result.rows) == 4
         assert result.truncated is False
+
+
+class TestP8CtesAreAcceptedAndStillReadOnly:
+    """
+    P8 — a read-only CTE runs; a data-modifying one is still refused (§7 item 8).
+
+    `WITH … SELECT` is standard, read-only, and the natural shape for the
+    analytical queries this product is sold for — and it was refused for the
+    product's whole life by a prefix guard that was doing no write-protection
+    work: the blocked-keyword scan runs first and ignores the opening token, so
+    every writing CTE was already gone before the prefix was consulted.
+
+    The two halves are one invariant on purpose. Accepting `WITH` without the
+    refusal half would be a widened write surface; asserting the refusal without
+    the acceptance is what the suite already did, and it pinned the limitation
+    as intent. See decisions/cte-support-in-validate-sql.md.
+    """
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "WITH a AS (SELECT 1) SELECT * FROM a",
+            "with a as (select 1) select * from a",
+            "/* leading comment */ SELECT 1",
+        ],
+    )
+    def test_read_only_shapes_are_accepted(self, sql: str) -> None:
+        assert validate_sql(sql).is_valid
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "WITH x AS (INSERT INTO t VALUES (1) RETURNING *) SELECT * FROM x",
+            "WITH x AS (DELETE FROM t RETURNING *) SELECT * FROM x",
+            "WITH x AS (SELECT 1) UPDATE t SET a = 1",
+        ],
+    )
+    def test_a_writing_cte_is_refused(self, sql: str) -> None:
+        assert not validate_sql(sql).is_valid
+
+    def test_a_cte_runs_end_to_end_and_is_still_capped(self, tmp_path: Path) -> None:
+        """
+        The validator half is worthless if the connector then mishandles it.
+        Accepting the statement must not cost the row cap or `truncated`.
+        """
+        c = CsvConnector(connection={"file_path": _csv(tmp_path, 5)})
+        result = c.execute("WITH a AS (SELECT * FROM data) SELECT * FROM a", limit=2)
+        assert len(result.rows) == 2
+        assert result.truncated is True

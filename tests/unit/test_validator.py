@@ -3,6 +3,8 @@ Tests for the SQL validator.
 validate_sql() returns ValidationResult(is_valid, reason) — it does not raise.
 """
 
+import pytest
+
 from tdb.engine.validator import validate_sql
 
 
@@ -152,3 +154,73 @@ class TestScannerCannotBeTricked:
     def test_versioned_mysql_executable_comment_is_not_a_comment(self):
         result = validate_sql("SELECT 1 /*!40001 ; DROP TABLE t */")
         assert not result.is_valid
+
+
+class TestCtesAndLeadingComments:
+    """
+    The prefix guard is read off the masked SQL and accepts `WITH` (§7 item 8).
+
+    `WITH … SELECT` is standard, read-only, and the natural shape for the
+    analytical queries this product is sold for — and it was refused for the
+    product's whole life by a guard that was doing no write-protection work.
+    See tdb-internal decisions/cte-support-in-validate-sql.md.
+    """
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "WITH a AS (SELECT 1) SELECT * FROM a",
+            "with a as (select 1) select * from a",
+            "  WITH a AS (SELECT 1) SELECT * FROM a  ",
+            "WITH RECURSIVE t(n) AS ("
+            "SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 5"
+            ") SELECT n FROM t",
+            "WITH a AS (SELECT 1), b AS (SELECT 2) SELECT * FROM a, b",
+            "/* leading block comment */ SELECT 1",
+            "-- leading line comment\nSELECT 1",
+            "/* a */ -- b\n WITH x AS (SELECT 1) SELECT * FROM x",
+        ],
+    )
+    def test_read_only_shapes_are_accepted(self, sql):
+        assert validate_sql(sql).is_valid
+
+    @pytest.mark.parametrize(
+        "sql,keyword",
+        [
+            (
+                "WITH x AS (INSERT INTO t VALUES (1) RETURNING *) SELECT * FROM x",
+                "INSERT",
+            ),
+            ("WITH x AS (DELETE FROM t RETURNING *) SELECT * FROM x", "DELETE"),
+            ("WITH x AS (UPDATE t SET a = 1 RETURNING *) SELECT * FROM x", "UPDATE"),
+            ("WITH x AS (SELECT 1) DELETE FROM t", "DELETE"),
+            ("WITH x AS (SELECT 1) MERGE INTO t USING x ON 1 = 1", "MERGE"),
+        ],
+    )
+    def test_a_writing_cte_is_still_refused_by_the_keyword_scan(self, sql, keyword):
+        """
+        This is why widening the prefix guard widens nothing: the keyword scan
+        runs first and ignores the opening token, so every data-modifying CTE
+        was already refused before the prefix was consulted. The reason string
+        proves which check did the work.
+        """
+        result = validate_sql(sql)
+        assert not result.is_valid
+        assert keyword in result.reason.upper()
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "-- select 1",
+            "/* select 1 */",
+            "/* c */ DROP TABLE t",
+            "EXPLAIN SELECT 1",
+            "EXEC sp_something",
+        ],
+    )
+    def test_masking_the_prefix_does_not_open_a_hole(self, sql):
+        """
+        A statement that is *only* a comment masks to nothing and must not read
+        as a valid SELECT, and a comment must not launder what follows it.
+        """
+        assert not validate_sql(sql).is_valid
