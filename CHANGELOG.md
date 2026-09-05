@@ -9,6 +9,12 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-09-05
+
+> Minor: `validate_sql()` now accepts **CTEs** (`WITH … SELECT`) and statements
+> that open with a comment. SQL that used to return 400 now returns 200 —
+> nothing that worked stops working, and no configuration changes.
+
 ### Changed
 
 - **CTEs (`WITH … SELECT`) are accepted.** `validate_sql()` required a statement
