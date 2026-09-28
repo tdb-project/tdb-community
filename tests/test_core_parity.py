@@ -240,3 +240,126 @@ class TestP8CtesAreAcceptedAndStillReadOnly:
         result = c.execute("WITH a AS (SELECT * FROM data) SELECT * FROM a", limit=2)
         assert len(result.rows) == 2
         assert result.truncated is True
+
+
+class TestP9SqlCannotReachFilesBeyondTheSource:
+    """
+    P9 — SQL reaches the registered CSV and its data directory, nothing else.
+
+    `TDB_ALLOWED_DATA_DIR` only ever checked the *registered* path. DuckDB
+    resolves file paths written inside the SQL too (`read_csv`, `read_text`,
+    `COPY … TO`), so a plain SELECT on any registered source could read any file
+    the process could, confinement set or not. The engine now refuses file
+    access outside the data directory and locks its configuration, and the
+    validator refuses a second statement — the only route to a write, since a
+    single SELECT or WITH cannot write a file.
+    """
+
+    @staticmethod
+    def _layout(tmp_path: Path) -> tuple[Path, Path]:
+        data = tmp_path / "data"
+        other = tmp_path / "other"
+        data.mkdir()
+        other.mkdir()
+        (data / "ok.csv").write_text("id,v\n1,a\n")
+        secret = other / "secret.csv"
+        secret.write_text("k,v\nP9-SECRET,1\n")
+        return data / "ok.csv", secret
+
+    @pytest.mark.parametrize("confined", [True, False])
+    def test_a_file_outside_the_data_dir_is_refused(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, confined: bool
+    ) -> None:
+        from tdb.connectors.csv import SqlFileAccessError, close_engine
+
+        ok, secret = self._layout(tmp_path)
+        if confined:
+            monkeypatch.setenv("TDB_ALLOWED_DATA_DIR", str(ok.parent))
+        else:
+            monkeypatch.delenv("TDB_ALLOWED_DATA_DIR", raising=False)
+        close_engine()
+        c = CsvConnector(connection={"file_path": str(ok)})
+        for sql in (
+            f"SELECT * FROM read_csv('{secret}')",
+            f"SELECT content FROM read_text('{secret}')",
+            f"SELECT * FROM read_csv('{ok.parent}/../other/secret.csv')",
+        ):
+            with pytest.raises(SqlFileAccessError):
+                c.execute(sql, limit=10)
+        assert c.execute("SELECT * FROM data", limit=10).rows == [{"id": 1, "v": "a"}]
+
+    def test_sql_cannot_change_the_engine_configuration(self, tmp_path: Path) -> None:
+        from tdb.connectors.csv import close_engine
+
+        ok, _ = self._layout(tmp_path)
+        close_engine()
+        c = CsvConnector(connection={"file_path": str(ok)})
+        with pytest.raises(Exception, match="(?i)configuration"):
+            c.execute("SELECT 1 LIMIT 1; SET enable_external_access = true", limit=10)
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "SELECT 1; SELECT 2",
+            "SELECT 1 AS a; COPY (SELECT 1) TO '/tmp/x.csv'",
+            "SELECT 1;SET threads = 1",
+            "SELECT 1; ATTACH 'x.db'",
+            "SELECT 1 /* ; */ ; SELECT 2",
+        ],
+    )
+    def test_a_second_statement_is_refused(self, sql: str) -> None:
+        result = validate_sql(sql)
+        assert not result.is_valid
+        assert "one statement" in result.reason.lower()
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "SELECT 1;",
+            "SELECT 1;  \n",
+            "SELECT 1; -- trailing comment",
+            "SELECT ';' AS semi",
+            "SELECT 1 /* ; SELECT 2 */",
+        ],
+    )
+    def test_a_trailing_or_quoted_semicolon_is_not_a_second_statement(
+        self, sql: str
+    ) -> None:
+        assert validate_sql(sql).is_valid
+
+    def test_the_api_refuses_and_audits_without_leaking_the_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from tdb.connectors.csv import close_engine
+
+        ok, secret = self._layout(tmp_path)
+        log = tmp_path / "audit.jsonl"
+        monkeypatch.setenv("TDB_LOG_FILE", str(log))
+        monkeypatch.setenv("TDB_ALLOWED_DATA_DIR", str(ok.parent))
+        close_engine()
+        reg = client.post(
+            "/v1/sources",
+            headers=HEADERS,
+            json={
+                "name": "p9",
+                "source_type": "csv",
+                "connection": {"file_path": str(ok)},
+            },
+        )
+        try:
+            assert reg.status_code == 201, reg.text
+            sid = reg.json()["id"]
+            r = client.post(
+                "/v1/query",
+                headers=HEADERS,
+                json={"source_id": sid, "sql": f"SELECT * FROM read_csv('{secret}')"},
+            )
+            assert r.status_code == 403, r.text
+            assert "P9-SECRET" not in r.text
+            entries = [json.loads(line) for line in log.read_text().splitlines()]
+            assert any(
+                e.get("event") == "denied" and e.get("reason") == "sql_file_access"
+                for e in entries
+            ), entries
+        finally:
+            client.delete(f"/v1/sources/{reg.json().get('id', '')}", headers=HEADERS)

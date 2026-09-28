@@ -9,6 +9,35 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-28
+
+> Minor, and it carries a **security fix**: SQL could read any file the server
+> process could. Upgrade. A query containing a second statement now returns 400
+> where it used to run — that behaviour change is why this is not a patch.
+
+### Security
+
+- **SQL can no longer read files outside the data directory.** DuckDB resolves
+  file paths written *inside* a query — `read_csv('/etc/passwd')`,
+  `read_text(...)` — not only the CSV TDB registers, and `TDB_ALLOWED_DATA_DIR`
+  only ever checked the registered path. So any SELECT on a registered source
+  could read any file the server process could read, with or without
+  confinement set. The CSV engine now refuses file access outside the data
+  directory (`TDB_ALLOWED_DATA_DIR`, or the registered CSV's own directory when
+  that is unset), no longer auto-loads extensions, and locks its configuration
+  so a query cannot undo either. A refused read returns **403** and is written
+  to the audit log as `reason: "sql_file_access"`, on both REST and MCP.
+  Affects every release up to and including 0.6.1.
+
+### Changed
+
+- **A query may contain only one statement.** `SELECT 1; SELECT 2` used to be
+  accepted, run both, and return only the last result set; it now returns
+  **400** (`Only one statement per query is allowed`). Only the first
+  statement's opening keyword was ever checked, so a second statement was the
+  one route to SQL the keyword list does not name. A single trailing `;` is
+  still accepted, as is a `;` inside a string or comment.
+
 ## [0.6.1] — 2026-09-28
 
 > Patch: a dependency refresh and nothing else. No behaviour, API or

@@ -134,6 +134,16 @@ def validate_sql(sql: str) -> ValidationResult:
             is_valid=False, reason=f"Blocked keyword: {match.group(0)}"
         )
 
+    # One statement only. Only the first statement's opening token is checked
+    # below, so a second one could be anything the keyword list does not name —
+    # `COPY … TO`, `ATTACH`, `SET`, `EXEC`. A trailing `;` is fine, and the
+    # masked text has already blanked any `;` inside a literal or comment.
+    semi = masked.find(";")
+    if semi != -1 and masked[semi + 1 :].strip():
+        return ValidationResult(
+            is_valid=False, reason="Only one statement per query is allowed"
+        )
+
     # The prefix is read off the *masked* text, so a statement opening with a
     # comment is judged by the SQL that follows it rather than by the comment.
     # `WITH` is accepted because the scan above is what refuses a data-modifying
