@@ -121,6 +121,22 @@ def _mask_noncode(sql: str) -> str:
     return "".join(out)
 
 
+def strip_trailing_semicolon(sql: str) -> str:
+    """
+    Remove one statement terminator — and any whitespace or comment after it —
+    from the end of *sql*. Anything else is returned unchanged.
+
+    Connectors append their row cap to the end of the statement, so
+    ``SELECT 1;`` became ``SELECT 1; LIMIT 6`` — a syntax error. The ``;`` is
+    found on the masked text, so one inside a literal or comment is never taken
+    for the terminator.
+    """
+    code = _mask_noncode(sql).rstrip()
+    if code.endswith(";"):
+        return sql[: len(code) - 1].rstrip()
+    return sql
+
+
 def validate_sql(sql: str) -> ValidationResult:
     stripped = sql.strip()
     if not stripped:
