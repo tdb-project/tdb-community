@@ -35,6 +35,7 @@ import duckdb
 
 from tdb.config import get_allowed_data_dir
 from tdb.connectors.base import BaseConnector, ConnectorResult
+from tdb.engine.validator import strip_trailing_semicolon
 
 _ENGINES: dict[str, duckdb.DuckDBPyConnection] = {}
 _ENGINE_LOCK = threading.Lock()
@@ -193,7 +194,7 @@ class CsvConnector(BaseConnector):
         # the ceiling and made `truncated` unreachable on this path — a 5-row
         # table queried with limit=2 returned 2 rows and truncated:false,
         # while the docs promise the flag means "you got everything".
-        sql_to_run = _inject_limit(sql, limit + 1)
+        sql_to_run = _inject_limit(strip_trailing_semicolon(sql), limit + 1)
 
         # A cursor on the shared engine, not a new engine. The registration is
         # cursor-local, so concurrent queries against different sources can each

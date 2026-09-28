@@ -363,3 +363,41 @@ class TestP9SqlCannotReachFilesBeyondTheSource:
             ), entries
         finally:
             client.delete(f"/v1/sources/{reg.json().get('id', '')}", headers=HEADERS)
+
+
+class TestP10ATrailingSemicolonRuns:
+    """
+    P10 — `SELECT …;` runs. Every connector that appends its row cap appended it
+    *after* the `;` (`SELECT 1; LIMIT 6`), so a trailing terminator — which most
+    SQL clients add by habit — was a syntax error on every release. The
+    validator accepted it; execution then failed.
+    """
+
+    @pytest.mark.parametrize(
+        ("sql", "expected"),
+        [
+            ("SELECT 1;", "SELECT 1"),
+            ("SELECT 1 ;  \n", "SELECT 1"),
+            ("SELECT 1; -- note", "SELECT 1"),
+            ("SELECT 1; /* note */", "SELECT 1"),
+            ("SELECT ';'", "SELECT ';'"),
+            ("SELECT 'a;'  ;", "SELECT 'a;'"),
+            ("SELECT 1", "SELECT 1"),
+            ("SELECT 1 -- ends in a comment", "SELECT 1 -- ends in a comment"),
+        ],
+    )
+    def test_only_a_trailing_terminator_is_removed(
+        self, sql: str, expected: str
+    ) -> None:
+        from tdb.engine.validator import strip_trailing_semicolon
+
+        assert strip_trailing_semicolon(sql) == expected
+
+    @pytest.mark.parametrize("tail", [";", "; -- note", " LIMIT 50;"])
+    def test_a_csv_query_ending_in_a_semicolon_runs_and_is_capped(
+        self, tmp_path: Path, tail: str
+    ) -> None:
+        c = CsvConnector(connection={"file_path": _csv(tmp_path, 5)})
+        result = c.execute(f"SELECT * FROM data{tail}", limit=2)
+        assert len(result.rows) == 2
+        assert result.truncated is True

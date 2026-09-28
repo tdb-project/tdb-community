@@ -9,6 +9,20 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-09-28
+
+> Patch: a query ending in `;` works.
+
+### Fixed
+
+- **A trailing `;` no longer breaks a query.** The CSV connector appended its row cap to
+  the end of the statement, after the `;` — `SELECT 1;` became
+  `SELECT 1; LIMIT 6`, a syntax error returned as a 500. The validator had
+  always accepted the statement, so it failed only at execution, on every
+  release. One trailing `;` (and any whitespace or comment after it) is now
+  removed before the cap is added; a `;` inside a string or comment is left
+  alone.
+
 ## [0.7.0] — 2026-09-28
 
 > Minor, and it carries a **security fix**: SQL could read any file the server
