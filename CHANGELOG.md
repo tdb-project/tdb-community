@@ -9,6 +9,12 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-28
+
+> Minor, and it carries a **security fix**: SQL could read any file the server
+> process could. Upgrade. A query containing a second statement now returns 400
+> where it used to run — that behaviour change is why this is not a patch.
+
 ### Security
 
 - **SQL can no longer read files outside the data directory.** DuckDB resolves

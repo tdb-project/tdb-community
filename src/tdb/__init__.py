@@ -4,4 +4,4 @@
 # else: pyproject.toml declares `dynamic = ["version"]` and hatchling reads
 # this line at build time, and main.py (FastAPI app version + root banner) and
 # the MCP router (serverInfo) import it at runtime.
-__version__ = "0.6.1"
+__version__ = "0.7.0"
