@@ -9,6 +9,18 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **`anyio` raised to 4.14.2** for GHSA-82r6-8w77-94w6 (critical — TLS
+  certificate spoofing via IDNA 2003 hostname encoding in `TLSStream`),
+  GHSA-3w57-8xmc-8v26 and GHSA-5p39-cfhj-2xmp (both in `run_process` /
+  `open_process` / process-pool workers). **TDB is not exposed to any of them**:
+  the only installed user of `TLSStream` is httpcore's async backend, reached
+  only through `httpx.AsyncClient`, which TDB never constructs — every outbound
+  call (the CLI client) is synchronous — and no installed package calls
+  AnyIO's subprocess APIs. Supply-chain hygiene; `anyio` stays transitive via
+  httpx and starlette.
+
 ## [0.6.0] — 2026-09-05
 
 > Minor: `validate_sql()` now accepts **CTEs** (`WITH … SELECT`) and statements
