@@ -9,6 +9,12 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-09-28
+
+> Patch: a dependency refresh and nothing else. No behaviour, API or
+> configuration change. TDB was not exposed to the advisories below; this clears
+> a critical-rated CVE from scans of the published image.
+
 ### Security
 
 - **`anyio` raised to 4.14.2** for GHSA-82r6-8w77-94w6 (critical — TLS
