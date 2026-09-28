@@ -35,23 +35,24 @@ class TestEngineLifecycle:
         src = _write(tmp_path / "a.csv", "id,v\n1,x\n2,y\n")
         conn = CsvConnector({"file_path": str(src)})
         conn.execute("SELECT * FROM data", limit=10)
-        first = csv_mod._ENGINE
+        first = dict(csv_mod._ENGINES)
         conn.execute("SELECT * FROM data", limit=10)
-        assert csv_mod._ENGINE is first is not None
+        assert len(first) == 1
+        assert csv_mod._ENGINES == first
 
     def test_one_engine_serves_different_sources(self, tmp_path: Path) -> None:
         """No per-source cache — so nothing grows with the number of sources."""
         a = _write(tmp_path / "a.csv", "id,v\n1,x\n")
         b = _write(tmp_path / "b.csv", "id,v\n1,y\n2,z\n")
         CsvConnector({"file_path": str(a)}).execute("SELECT * FROM data", limit=10)
-        engine_after_a = csv_mod._ENGINE
+        engines_after_a = dict(csv_mod._ENGINES)
         CsvConnector({"file_path": str(b)}).execute("SELECT * FROM data", limit=10)
-        assert csv_mod._ENGINE is engine_after_a
+        assert csv_mod._ENGINES == engines_after_a
 
     def test_close_engine_is_idempotent(self) -> None:
         csv_mod.close_engine()
         csv_mod.close_engine()
-        assert csv_mod._ENGINE is None
+        assert csv_mod._ENGINES == {}
 
     def test_engine_is_rebuilt_after_close(self, tmp_path: Path) -> None:
         src = _write(tmp_path / "a.csv", "id,v\n1,x\n")

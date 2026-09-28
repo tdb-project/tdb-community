@@ -194,6 +194,41 @@ class TestMcpDenials:
         assert denied[0]["action"] == "mcp_query"
         assert denied[0]["reason"] == "sql_validation_failed"
 
+    def test_mcp_read_of_a_file_outside_the_data_dir_is_audited(
+        self, audit_lines, sample_csv, tmp_path_factory
+    ):
+        """The MCP path is the one an AI agent takes, so it refuses and audits
+        the same file read the REST path does (P9)."""
+        secret = tmp_path_factory.mktemp("elsewhere") / "secret.csv"
+        secret.write_text("k\nMCP-SECRET\n")
+        payload = {
+            "name": "src_mcp_file",
+            "source_type": "csv",
+            "connection": {"file_path": sample_csv},
+        }
+        client.post("/v1/sources", json=payload, headers=HEADERS)
+        r = client.post(
+            "/v1/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "query_source",
+                    "arguments": {
+                        "sql": f"SELECT * FROM read_csv('{secret}')",
+                        "source_name": "src_mcp_file",
+                    },
+                },
+            },
+            headers=HEADERS,
+        )
+        assert "MCP-SECRET" not in r.text
+        denied = _denials(audit_lines())
+        assert len(denied) == 1
+        assert denied[0]["action"] == "mcp_query"
+        assert denied[0]["reason"] == "sql_file_access"
+
 
 class TestAuditSourceIdIsTheUuid:
     """The audit trail's source_id is the registered source's UUID, whatever
