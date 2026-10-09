@@ -9,6 +9,16 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-10-09
+
+> Minor because SQL that returned 400 now returns 200.
+
+### Fixed
+
+- **A write keyword used as an alias is accepted.** `SELECT … AS update` was
+  refused as a write. A blocked word directly after `AS` is now read as an
+  alias; a writing CTE (`WITH x AS (DELETE …)`) is still refused.
+
 ## [0.8.0] — 2026-10-09
 
 > Minor because SQL that returned 400 now returns 200 — the same reasoning as

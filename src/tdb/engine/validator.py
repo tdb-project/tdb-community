@@ -24,6 +24,12 @@ _BLOCKED_PATTERN = re.compile(
     r"\b(" + "|".join(_BLOCKED) + r")\b|\b(replace)\b(?!\s*\()", re.IGNORECASE
 )
 
+# A blocked word straight after `AS` is a column alias, not a statement:
+# PostgreSQL's catalog idiom `has_table_privilege(…, 'UPDATE') AS update` — sent
+# by pgjdbc and Metabase — was refused as a write. A writing CTE puts the keyword
+# after `AS (`, never directly after `AS`, so it is still refused.
+_ALIAS_BEFORE = re.compile(r"\bAS\s+$", re.IGNORECASE)
+
 # Regions that are data or prose, not executable SQL: their contents must not be
 # scanned for blocked keywords.
 #
@@ -261,8 +267,9 @@ def validate_sql(sql: str) -> ValidationResult:
 
 
 def _validate_masked(masked: str) -> ValidationResult:
-    match = _BLOCKED_PATTERN.search(masked)
-    if match:
+    for match in _BLOCKED_PATTERN.finditer(masked):
+        if _ALIAS_BEFORE.search(masked[max(0, match.start() - 32) : match.start()]):
+            continue
         return ValidationResult(
             is_valid=False, reason=f"Blocked keyword: {match.group(0)}"
         )
