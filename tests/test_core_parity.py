@@ -521,3 +521,22 @@ class TestP12ReplaceIsAFunction:
     )
     def test_the_statement_is_refused(self, sql: str) -> None:
         assert not validate_sql(sql).is_valid
+
+
+class TestP13AKeywordAliasIsNotAWrite:
+    """
+    P13 — `SELECT … AS update` runs. A blocked word directly after `AS` is an
+    alias; the catalog queries pgjdbc and Metabase send use exactly that. A
+    writing CTE puts its keyword after `AS (` and is still refused.
+    """
+
+    def test_an_alias_named_for_a_write_keyword_runs(self, tmp_path: Path) -> None:
+        sql = "SELECT id AS update, note AS delete FROM data LIMIT 1"
+        assert validate_sql(sql).is_valid
+        c = CsvConnector(connection={"file_path": _csv(tmp_path, 2)})
+        assert c.execute(sql, limit=5).rows == [{"update": 0, "delete": "ok"}]
+
+    def test_a_writing_cte_is_still_refused(self) -> None:
+        assert not validate_sql(
+            "WITH x AS (DELETE FROM t RETURNING *) SELECT * FROM x"
+        ).is_valid

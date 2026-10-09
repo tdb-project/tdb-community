@@ -297,3 +297,35 @@ class TestReplaceIsAFunctionNotAStatement:
     )
     def test_the_statement_is_refused(self, sql):
         assert not validate_sql(sql).is_valid
+
+
+class TestAKeywordAliasIsNotAStatement:
+    """
+    A blocked word directly after `AS` is a column or table alias. PostgreSQL's
+    catalog idiom `has_table_privilege(…, 'UPDATE') AS update` — sent by pgjdbc
+    and Metabase — was refused as a write until 0.9.0.
+    """
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "SELECT has_table_privilege('t', 'UPDATE') AS update FROM data",
+            "SELECT 1 AS insert, 2 as delete, 3 AS merge FROM data",
+            "SELECT 1 AS /* note */ update",
+            "SELECT * FROM data AS update",
+        ],
+    )
+    def test_an_alias_is_accepted(self, sql):
+        assert validate_sql(sql).is_valid
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "WITH x AS (DELETE FROM t RETURNING *) SELECT * FROM x",
+            "WITH x AS(UPDATE t SET a = 1 RETURNING *) SELECT * FROM x",
+            "SELECT 1 AS delete; DELETE FROM t",
+            "SELECT update FROM t",
+        ],
+    )
+    def test_a_write_is_still_refused(self, sql):
+        assert not validate_sql(sql).is_valid
