@@ -224,3 +224,42 @@ class TestCtesAndLeadingComments:
         as a valid SELECT, and a comment must not launder what follows it.
         """
         assert not validate_sql(sql).is_valid
+
+
+class TestEveryDialectReading:
+    """
+    The SQL must pass however each engine TDB runs on reads its literals and
+    comments. Each case passes the old ANSI-only scanner — the second statement
+    sits inside what that scanner took for a string or comment — and is a
+    second statement to the engine named.
+    """
+
+    @pytest.mark.parametrize(
+        ("engine", "sql"),
+        [
+            ("postgres/duckdb dollar-quote", "SELECT $$'$$; SELECT 2; SELECT '"),
+            ("postgres E-string", "SELECT E'\\'' AS a; SELECT 2; SELECT 'x'"),
+            ("postgres/tsql nesting", "SELECT 1 /* /* */ ' */ ; SELECT 2; SELECT 'a'"),
+            ("mysql backslash", "SELECT 'a\\'' AS x; SELECT 2 -- '"),
+            ("mysql hash comment", "SELECT 1 # '\n; SELECT 2 -- '"),
+            ("mysql -- needs a space", "SELECT 1 --x; SELECT 2\n"),
+            ("snowflake // comment", "SELECT 1 // '\n; SELECT 2 -- '"),
+        ],
+    )
+    def test_a_statement_hidden_from_one_reading_is_refused(self, engine, sql):
+        assert not validate_sql(sql).is_valid, engine
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "SELECT data #>> '{a,b}' FROM t",
+            "SELECT $1",
+            "SELECT a$b FROM t",
+            "SELECT $$plain$$",
+            "SELECT 'it''s'",
+            "SELECT 1 /* outer /* inner */ still */",
+            "SELECT * FROM t WHERE p LIKE 'C:\\\\x%'",
+        ],
+    )
+    def test_ordinary_read_only_sql_still_passes(self, sql):
+        assert validate_sql(sql).is_valid
