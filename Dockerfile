@@ -10,7 +10,13 @@ COPY requirements.txt ./
 
 # Install all runtime dependencies into the system Python
 # (project source is added via PYTHONPATH below — no need to install the package itself)
-RUN uv pip install --system --no-cache -r requirements.txt
+RUN uv pip install --system --no-cache -r requirements.txt \
+    # pip comes with the base image and nothing at runtime uses it — uv installs
+    # the dependencies. Removed, with ensurepip's bundled wheel, so the image
+    # does not carry a package manager (or its CVEs, e.g. CVE-2026-13346).
+    && python -m pip uninstall --yes --quiet pip \
+    && rm -f /usr/local/lib/python3.*/ensurepip/_bundled/pip-*.whl \
+             /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.*
 
 # Copy source
 COPY src/ ./src/

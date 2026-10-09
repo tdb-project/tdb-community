@@ -9,6 +9,19 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-10-09
+
+> Patch: the published image no longer contains pip.
+
+### Security
+
+- **pip is removed from the image.** The `python:3.12-slim` base image ships
+  pip 25.0.1, which image scanners report for six CVEs, including
+  CVE-2026-13346 (GHSA-qwm4-qh6w-59xr). TDB never runs pip — uv installs the
+  dependencies at build time — so it was not exposed in use. Rather than
+  upgrade a tool nothing uses, the image now drops pip and `ensurepip`'s
+  bundled pip wheel. Verified with Trivy: 0 Python-package findings.
+
 ## [0.9.0] — 2026-10-09
 
 > Minor because SQL that returned 400 now returns 200.
