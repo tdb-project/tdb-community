@@ -9,6 +9,32 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.2] — 2026-10-09
+
+> Patch carrying a **security fix**. Upgrade.
+
+### Security
+
+- **The read-only check could be shown one statement while the engine ran
+  several.** The SQL validator decided where string literals and comments end
+  the ANSI way only. DuckDB, like PostgreSQL, also reads dollar-quoted strings,
+  `E'…'` strings with backslash escapes and nested block comments, so carefully
+  quoted SQL could carry a second statement past the one-statement rule
+  introduced in 0.7.0 — and DuckDB executed it. The engine lock from 0.7.0 still
+  confined file access to the data directory, but inside that directory a
+  second statement could write. Any caller with query access was affected.
+  Fixed in two independent places:
+  - the validator now reads the SQL the way every supported engine does and
+    must accept it under each reading;
+  - the CSV connector asks DuckDB's own parser and runs the query only if it is
+    exactly one `SELECT`. A refusal at this layer is a 400, audited as
+    `sql_validation_failed`, on REST and MCP.
+
+  SQL that some engine would read differently is now refused for all of them —
+  for example a string ending in a backslash followed by a quote. Ordinary
+  read-only SQL, including dollar-quoted strings and Postgres JSON operators,
+  is unaffected.
+
 ## [0.7.1] — 2026-09-28
 
 > Patch: a query ending in `;` works.

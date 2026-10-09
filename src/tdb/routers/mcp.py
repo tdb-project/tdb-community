@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse
 from tdb import __version__
 from tdb.audit.logger import get_logger, log_denial, log_query
 from tdb.config import get_api_keys
-from tdb.connectors.csv import CsvConnector, SqlFileAccessError
+from tdb.connectors.csv import CsvConnector, SqlFileAccessError, SqlRefusedError
 from tdb.engine.validator import validate_sql
 from tdb.registry import store
 
@@ -160,6 +160,15 @@ def _handle_tools_call(request_id: Any, params: dict, api_key: str = "") -> dict
     try:
         connector = CsvConnector(source.connection)
         result = connector.execute(sql, limit=1000)
+    except SqlRefusedError as exc:
+        log_denial(
+            action="mcp_query",
+            reason="sql_validation_failed",
+            source_id=source.id,
+            sql=sql,
+            key_hint=key_hint,
+        )
+        return _tool_error(request_id, f"SQL validation failed: {exc}")
     except SqlFileAccessError as exc:
         log_denial(
             action="mcp_query",

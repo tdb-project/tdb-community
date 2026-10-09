@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from tdb.audit.logger import get_logger, log_denial, log_query
 from tdb.auth.apikey import require_api_key
-from tdb.connectors.csv import CsvConnector, SqlFileAccessError
+from tdb.connectors.csv import CsvConnector, SqlFileAccessError, SqlRefusedError
 from tdb.engine.validator import validate_sql
 from tdb.models import QueryRequest, QueryResponse
 from tdb.registry.store import get_source_by_ref
@@ -128,6 +128,18 @@ def run_query(
     # 4. Execute
     try:
         result = connector.execute(body.sql, limit=body.limit)
+    except SqlRefusedError as exc:
+        log_denial(
+            action="query",
+            reason="sql_validation_failed",
+            source_id=source.id,
+            sql=body.sql,
+            key_hint=key_hint,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"SQL validation failed: {exc}",
+        ) from exc
     except SqlFileAccessError as exc:
         log_denial(
             action="query",

@@ -289,13 +289,19 @@ class TestP9SqlCannotReachFilesBeyondTheSource:
         assert c.execute("SELECT * FROM data", limit=10).rows == [{"id": 1, "v": "a"}]
 
     def test_sql_cannot_change_the_engine_configuration(self, tmp_path: Path) -> None:
-        from tdb.connectors.csv import close_engine
+        # Driven at the engine, not the connector: the connector now refuses a
+        # second statement before it runs, and the lock has to hold even if
+        # something ever reaches the engine past that check.
+        from tdb.connectors.csv import _data_root, _engine, close_engine
 
         ok, _ = self._layout(tmp_path)
         close_engine()
-        c = CsvConnector(connection={"file_path": str(ok)})
-        with pytest.raises(Exception, match="(?i)configuration"):
-            c.execute("SELECT 1 LIMIT 1; SET enable_external_access = true", limit=10)
+        cur = _engine(_data_root(str(ok))).cursor()
+        try:
+            with pytest.raises(Exception, match="(?i)configuration"):
+                cur.execute("SET enable_external_access = true")
+        finally:
+            cur.close()
 
     @pytest.mark.parametrize(
         "sql",
@@ -401,3 +407,96 @@ class TestP10ATrailingSemicolonRuns:
         result = c.execute(f"SELECT * FROM data{tail}", limit=2)
         assert len(result.rows) == 2
         assert result.truncated is True
+
+
+class TestP11EveryEngineReadsTheSqlTheValidatorRead:
+    """
+    P11 — the validator and the engine agree on where literals and comments end.
+
+    The 0.7.x scanner masked string literals the ANSI way only. PostgreSQL and
+    DuckDB read `$$…$$` as a string, nest block comments and honour backslashes
+    in `E'…'`, so a quote *inside* one of those opened a string in the scanner
+    and hid the SQL after it — including a second statement, which DuckDB then
+    executed. The validator now masks once per dialect and must pass in all of
+    them, and the CSV connector asks DuckDB's own parser for exactly one SELECT.
+    """
+
+    SMUGGLED = (
+        "SELECT $$'$$ AS a; SELECT 42 AS b; SELECT 'x' AS c",
+        "SELECT $q$'$q$ AS a; SELECT 42 AS b; SELECT 'x' AS c",
+        "SELECT E'\\'' AS a; SELECT 42 AS b; SELECT 'x' AS c",
+        "SELECT 1 /* /* */ ' */ ; SELECT 42 AS b; SELECT 'a' AS c",
+    )
+
+    @pytest.mark.parametrize("sql", SMUGGLED)
+    def test_the_validator_refuses_sql_an_engine_reads_as_several_statements(
+        self, sql: str
+    ) -> None:
+        assert not validate_sql(sql).is_valid
+
+    @pytest.mark.parametrize("sql", SMUGGLED)
+    def test_the_csv_connector_refuses_it_without_the_validator(
+        self, tmp_path: Path, sql: str
+    ) -> None:
+        from tdb.connectors.csv import SqlRefusedError
+
+        c = CsvConnector(connection={"file_path": _csv(tmp_path, 3)})
+        with pytest.raises(SqlRefusedError):
+            c.execute(sql, limit=10)
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "SELECT 'update pending' AS note FROM data",
+            "SELECT $$it's$$ AS a",
+            "SELECT 'C:\\x' AS p",
+            "SELECT 1 /* outer /* inner */ still a comment */",
+            "SELECT 1 AS a;",
+        ],
+    )
+    def test_read_only_sql_using_those_forms_still_runs(
+        self, tmp_path: Path, sql: str
+    ) -> None:
+        assert validate_sql(sql).is_valid
+        c = CsvConnector(connection={"file_path": _csv(tmp_path, 3)})
+        assert c.execute(sql, limit=10).rows
+
+    def test_past_the_validator_the_api_refuses_with_400_and_audits(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The validator is stubbed out so this exercises the connector layer on
+        # its own through the real route: if the text scan is ever wrong again,
+        # the caller must still get a refusal, and the audit log must say so.
+        import tdb.routers.query as query_router
+        from tdb.engine.validator import ValidationResult
+
+        log = tmp_path / "audit.jsonl"
+        monkeypatch.setenv("TDB_LOG_FILE", str(log))
+        monkeypatch.setattr(
+            query_router, "validate_sql", lambda sql: ValidationResult(is_valid=True)
+        )
+        reg = client.post(
+            "/v1/sources",
+            headers=HEADERS,
+            json={
+                "name": "p11",
+                "source_type": "csv",
+                "connection": {"file_path": _csv(tmp_path, 3)},
+            },
+        )
+        try:
+            assert reg.status_code == 201, reg.text
+            r = client.post(
+                "/v1/query",
+                headers=HEADERS,
+                json={"source_id": reg.json()["id"], "sql": self.SMUGGLED[0]},
+            )
+            assert r.status_code == 400, r.text
+            entries = [json.loads(line) for line in log.read_text().splitlines()]
+            assert any(
+                e.get("event") == "denied"
+                and e.get("reason") == "sql_validation_failed"
+                for e in entries
+            )
+        finally:
+            client.delete(f"/v1/sources/{reg.json()['id']}", headers=HEADERS)

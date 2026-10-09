@@ -45,6 +45,10 @@ class SqlFileAccessError(PermissionError):
     """SQL named a file outside the source's data directory."""
 
 
+class SqlRefusedError(ValueError):
+    """DuckDB's own parser read the SQL as something other than one SELECT."""
+
+
 def _data_root(file_path: str) -> str:
     """
     The directory SQL on this source may read files from: `TDB_ALLOWED_DATA_DIR`
@@ -204,6 +208,15 @@ class CsvConnector(BaseConnector):
             # Register the CSV as a virtual table called 'data' via the
             # DuckDB relation API — no SQL string interpolation needed.
             cur.register("data", cur.read_csv(self._file_path))
+            # The engine's parser has the last word on what will run. validate_sql()
+            # scans text, and a text scanner that misjudges where a literal ends
+            # can be shown one statement while DuckDB executes several — every
+            # statement in the string, returning only the last result.
+            statements = cur.extract_statements(sql_to_run)
+            if len(statements) != 1 or (
+                statements[0].type != duckdb.StatementType.SELECT
+            ):
+                raise SqlRefusedError("Only a single SELECT statement is allowed.")
             try:
                 cursor = cur.execute(sql_to_run)
             except duckdb.PermissionException as exc:
