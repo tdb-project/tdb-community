@@ -11,10 +11,18 @@ _BLOCKED = {
     "create",
     "alter",
     "truncate",
-    "replace",
     "merge",
 }
-_BLOCKED_PATTERN = re.compile(r"\b(" + "|".join(_BLOCKED) + r")\b", re.IGNORECASE)
+# `replace` is refused as a statement (MySQL's `REPLACE [INTO] t …`) but not as
+# the string function every engine has. Measured on MySQL 8.0: no REPLACE
+# statement form puts `(` straight after the keyword — `REPLACE (t) …` is a
+# syntax error — and `WITH … REPLACE` is not valid. PostgreSQL, DuckDB, SQL
+# Server and Snowflake have no REPLACE statement; `INSERT OR REPLACE` and
+# `CREATE OR REPLACE` are refused by their first keyword. The lookahead runs on
+# masked text, so a comment between the name and `(` reads as whitespace.
+_BLOCKED_PATTERN = re.compile(
+    r"\b(" + "|".join(_BLOCKED) + r")\b|\b(replace)\b(?!\s*\()", re.IGNORECASE
+)
 
 # Regions that are data or prose, not executable SQL: their contents must not be
 # scanned for blocked keywords.

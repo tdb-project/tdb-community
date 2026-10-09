@@ -500,3 +500,24 @@ class TestP11EveryEngineReadsTheSqlTheValidatorRead:
             )
         finally:
             client.delete(f"/v1/sources/{reg.json()['id']}", headers=HEADERS)
+
+
+class TestP12ReplaceIsAFunction:
+    """
+    P12 — `replace()` the string function runs; `REPLACE` the MySQL statement is
+    refused. The keyword list held `replace` whole, so `SELECT replace(…)` was a
+    400 on every path, and the catalog queries pgjdbc and Metabase send were
+    refused with it.
+    """
+
+    def test_the_function_runs_on_a_csv_source(self, tmp_path: Path) -> None:
+        sql = "SELECT replace(note, 'o', '0') AS n FROM data LIMIT 1"
+        assert validate_sql(sql).is_valid
+        c = CsvConnector(connection={"file_path": _csv(tmp_path, 2)})
+        assert c.execute(sql, limit=5).rows == [{"n": "0k"}]
+
+    @pytest.mark.parametrize(
+        "sql", ["REPLACE INTO data VALUES (1, 'x')", "REPLACE data VALUES (1, 'x')"]
+    )
+    def test_the_statement_is_refused(self, sql: str) -> None:
+        assert not validate_sql(sql).is_valid
