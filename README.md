@@ -149,7 +149,8 @@ at **1,000**, so a bare `SELECT *` returns at most those rows regardless of your
 
 **Read-only is enforced.** A query is one statement that starts with `SELECT` or
 `WITH`, and any of these keywords — `INSERT`, `UPDATE`, `DELETE`, `DROP`, `CREATE`,
-`ALTER`, `TRUNCATE`, `REPLACE`, `MERGE` (case-insensitive) — is rejected with a `400`.
+`ALTER`, `TRUNCATE`, `REPLACE`, `MERGE` (case-insensitive) — is rejected with a `400`
+(the `replace()` string function is fine).
 Keywords inside string literals and comments don't count; SQL whose literals or
 comments different SQL engines would read differently is refused. Aggregations,
 `WHERE`, `JOIN` (the single table is `data`), `GROUP BY`, `ORDER BY` and CTEs are all

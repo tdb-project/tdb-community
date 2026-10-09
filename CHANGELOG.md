@@ -9,6 +9,21 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-10-09
+
+> Minor because SQL that returned 400 now returns 200 — the same reasoning as
+> 0.6.0.
+
+### Fixed
+
+- **The `replace()` string function is accepted.** `REPLACE` was on the
+  write-keyword list as a whole word, for MySQL's `REPLACE [INTO] t …`
+  statement, so any query using the string function —
+  `SELECT replace(note, 'a', 'b') FROM data` — was refused with
+  `Blocked keyword: replace`. `replace` followed by `(` is now read as the
+  function; the statement is still refused. No supported engine has a
+  `REPLACE` statement in which `(` follows the keyword.
+
 ## [0.7.2] — 2026-10-09
 
 > Patch carrying a **security fix**. Upgrade.

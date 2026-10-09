@@ -263,3 +263,37 @@ class TestEveryDialectReading:
     )
     def test_ordinary_read_only_sql_still_passes(self, sql):
         assert validate_sql(sql).is_valid
+
+
+class TestReplaceIsAFunctionNotAStatement:
+    """
+    `REPLACE` is refused as MySQL's `REPLACE [INTO] t …` statement, never as
+    the `replace()` string function — which pgjdbc's and Metabase's catalog
+    queries use, and which was refused on every path until 0.8.0.
+    """
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "SELECT replace(customer, 'c', 'x') FROM data",
+            "SELECT REPLACE (customer, 'c', 'x') FROM data",
+            "SELECT replace/* note */(customer, 'c', 'x') FROM data",
+            "WITH t AS (SELECT replace(note, 'a', 'b') AS n FROM data) SELECT n FROM t",
+        ],
+    )
+    def test_the_function_is_accepted(self, sql):
+        assert validate_sql(sql).is_valid
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "REPLACE INTO t VALUES (1)",
+            "REPLACE t VALUES (1)",
+            "REPLACE /**/ INTO t VALUES (1)",
+            "SELECT 1; REPLACE INTO t VALUES (1)",
+            "WITH c AS (SELECT 1) REPLACE INTO t SELECT * FROM c",
+            "SELECT 1 /*! REPLACE INTO t */",
+        ],
+    )
+    def test_the_statement_is_refused(self, sql):
+        assert not validate_sql(sql).is_valid
