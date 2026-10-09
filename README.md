@@ -147,10 +147,13 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8000/v1/query `
 them). The optional `limit` field caps the response: it defaults to **100** and is hard-capped
 at **1,000**, so a bare `SELECT *` returns at most those rows regardless of your SQL.
 
-**Read-only is enforced.** A statement must start with `SELECT`, and any of these
-keywords — `INSERT`, `UPDATE`, `DELETE`, `DROP`, `CREATE`, `ALTER`, `TRUNCATE`,
-`REPLACE`, `MERGE` (case-insensitive) — is rejected with a `400`. Aggregations,
-`WHERE`, `JOIN` (the single table is `data`), `GROUP BY`, and `ORDER BY` are all fine.
+**Read-only is enforced.** A query is one statement that starts with `SELECT` or
+`WITH`, and any of these keywords — `INSERT`, `UPDATE`, `DELETE`, `DROP`, `CREATE`,
+`ALTER`, `TRUNCATE`, `REPLACE`, `MERGE` (case-insensitive) — is rejected with a `400`.
+Keywords inside string literals and comments don't count; SQL whose literals or
+comments different SQL engines would read differently is refused. Aggregations,
+`WHERE`, `JOIN` (the single table is `data`), `GROUP BY`, `ORDER BY` and CTEs are all
+fine.
 
 ### Step 4 — Connect an AI tool (MCP)
 
