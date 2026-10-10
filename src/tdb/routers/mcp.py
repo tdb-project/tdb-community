@@ -5,8 +5,13 @@ POST /v1/mcp
 
 Supported methods:
     initialize      — MCP handshake (unauthenticated — allows discovery)
+    ping            — liveness, empty result (unauthenticated)
     tools/list      — returns the single query_source tool spec (requires auth)
     tools/call      — executes the query_source tool (requires auth)
+
+Notifications and client responses (no `id`, or no `method`) are accepted with
+202 and no body. A request carrying an `Origin` from another site is refused
+with 403.
 
 Community Edition: exactly one tool exposed (query_source).
 Auth: Bearer token via Authorization header, same key(s) as REST endpoints.
@@ -18,9 +23,10 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from tdb import __version__
 from tdb.audit.logger import get_logger, log_denial, log_query
@@ -109,6 +115,10 @@ def _handle_initialize(request_id: Any, _params: dict) -> dict:
     )
 
 
+def _handle_ping(request_id: Any, _params: dict) -> dict:
+    return _ok(request_id, {})
+
+
 def _handle_tools_list(request_id: Any, _params: dict) -> dict:
     return _ok(request_id, {"tools": [_TOOL_SPEC]})
 
@@ -118,8 +128,11 @@ def _handle_tools_call(request_id: Any, params: dict, api_key: str = "") -> dict
         return _err(request_id, -32601, f"Unknown tool: {params.get('name')}")
 
     args = params.get("arguments", {})
-    sql = args.get("sql", "").strip()
+    sql = args.get("sql", "")
     source_name = args.get("source_name")
+    if not isinstance(sql, str) or not isinstance(source_name, str | None):
+        return _tool_error(request_id, "'sql' and 'source_name' must be strings.")
+    sql = sql.strip()
 
     key_hint = api_key[:6] + "..." if api_key else ""
 
@@ -208,9 +221,27 @@ def _handle_tools_call(request_id: Any, params: dict, api_key: str = "") -> dict
 
 _HANDLERS = {
     "initialize": _handle_initialize,
+    "ping": _handle_ping,
     "tools/list": _handle_tools_list,
     "tools/call": _handle_tools_call,
 }
+
+
+# The handshake and liveness must work before a client presents credentials.
+_UNAUTHENTICATED = frozenset({"initialize", "ping"})
+
+
+def _origin_allowed(request: Request) -> bool:
+    """
+    A browser always sends Origin; MCP clients outside a browser do not, so a
+    foreign Origin is a cross-site page and is refused. A same-origin match
+    does not stop DNS rebinding (there Origin and Host agree); what protects
+    the server then is that every method but initialize and ping needs a key.
+    """
+    origin = request.headers.get("origin")
+    if origin is None:
+        return True
+    return urlsplit(origin).netloc.lower() == request.headers.get("host", "").lower()
 
 
 # ---------------------------------------------------------------------------
@@ -226,27 +257,52 @@ async def mcp_endpoint(request: Request) -> JSONResponse:
     Connects Claude Desktop, Cursor, and other MCP clients directly to
     the registered data source without extra configuration.
 
-    Supported methods: `initialize`, `tools/list`, `tools/call`
+    Supported methods: `initialize`, `ping`, `tools/list`, `tools/call`
     """
+    if not _origin_allowed(request):
+        log_denial(action="mcp_auth", reason="invalid_origin")
+        return JSONResponse(
+            _err(None, -32600, "Forbidden: Origin not allowed"), status_code=403
+        )
+
     try:
         body = await request.json()
     except Exception:
         return JSONResponse(_err(None, -32700, "Parse error: invalid JSON"))
 
+    if isinstance(body, list):
+        return JSONResponse(
+            _err(None, -32600, "Batch requests are not supported"), status_code=400
+        )
+    if not isinstance(body, dict):
+        return JSONResponse(_err(None, -32600, "Invalid Request"), status_code=400)
+
     if body.get("jsonrpc") != "2.0":
         return JSONResponse(_err(body.get("id"), -32600, "Invalid JSON-RPC version"))
+
+    # A notification, or a client's response to a server request: nothing to
+    # answer. Replying to one is a protocol error the client has to tolerate.
+    if "id" not in body or "method" not in body:
+        return Response(status_code=202)
 
     method = body.get("method")
     request_id = body.get("id")
     params = body.get("params", {})
+    if not isinstance(params, dict) or (
+        method == "tools/call"
+        and not (
+            isinstance(params.get("name"), str)
+            and isinstance(params.get("arguments", {}), dict)
+        )
+    ):
+        return JSONResponse(_err(request_id, -32602, "Invalid params"))
 
     handler = _HANDLERS.get(method)
     if handler is None:
         return JSONResponse(_err(request_id, -32601, f"Method not found: {method}"))
 
-    # initialize is unauthenticated (MCP handshake); all other methods require auth
     token = ""
-    if method != "initialize":
+    if method not in _UNAUTHENTICATED:
         auth_header = request.headers.get("Authorization", "")
         token = auth_header.removeprefix("Bearer ").strip()
         if token not in get_api_keys():

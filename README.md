@@ -553,12 +553,13 @@ noted. The live, auto-generated request/response schemas are at
 | `DELETE` | `/v1/sources/{id}` | ✅ | Remove a source (`204`) |
 | `GET` | `/v1/sources/{id}/schema` | ✅ | Column names and inferred types — no rows |
 | `POST` | `/v1/query` | ✅ | Run a read-only `SELECT` (max 1,000 rows) |
-| `POST` | `/v1/mcp` | ✅ * | MCP JSON-RPC endpoint (`initialize`, `tools/list`, `tools/call`) |
+| `POST` | `/v1/mcp` | ✅ * | MCP JSON-RPC endpoint (`initialize`, `ping`, `tools/list`, `tools/call`) |
 | `GET` | `/health` | — | Liveness probe → `{"status": "ok"}` |
 | `GET` | `/` | — | Service banner and version |
 
-\* On `/v1/mcp`, the `initialize` handshake is unauthenticated so clients can discover the
-server; `tools/list` and `tools/call` require the Bearer key.
+\* On `/v1/mcp`, the `initialize` handshake and `ping` are unauthenticated so clients can
+discover the server; `tools/list` and `tools/call` require the Bearer key. A request from
+a browser page on another origin is refused with 403.
 
 ---
 

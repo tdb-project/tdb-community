@@ -9,6 +9,34 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-10-10
+
+> Minor because `ping` now succeeds and a cross-site `Origin` is now refused (403).
+
+### Fixed
+
+- **Malformed MCP requests no longer return 500.** A batched (array) body, a
+  body that is not a JSON object, and `params` or `arguments` that are not
+  objects each reached `.get()` on the wrong type. They are now JSON-RPC errors:
+  `-32600` with HTTP 400 for the body, `-32602` for params.
+- **Notifications get no reply.** `notifications/initialized` and other messages
+  without an `id`, and client responses, are accepted with HTTP 202 and an empty
+  body. TDB used to answer them with "Method not found", which clients had to
+  tolerate.
+- **`ping` answers** with an empty result, without a key, as every MCP revision
+  TDB negotiates requires.
+- **A wrongly typed `sql` or `source_name` is a tool error**, not a 500.
+- **A 500 no longer returns the exception text** to the caller. It is still logged.
+
+### Security
+
+- **The MCP endpoint checks `Origin`.** A request from a browser page on another
+  site is refused with 403 and audited as `invalid_origin`. Clients outside a
+  browser send no `Origin` and are unaffected, and a page served by TDB itself is
+  still allowed. Before this, a cross-site page could not have used the endpoint
+  anyway, since every method but `initialize` needs a key and this edition sends
+  no CORS headers. The MCP spec requires the check.
+
 ## [0.9.2] — 2026-10-10
 
 > Patch: the row cap is applied by DuckDB again when a query ends in a comment.
