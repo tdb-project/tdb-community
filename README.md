@@ -30,8 +30,8 @@ need [Docker Desktop](https://www.docker.com/products/docker-desktop/). Put your
 `data/` folder next to where you run the commands below.
 
 > **Windows: `curl.exe` for the GET, `Invoke-RestMethod` for JSON POSTs.** In PowerShell,
-> `curl` is an alias for `Invoke-WebRequest`, so type `curl.exe` explicitly for the Step 1
-> health check to get the real curl. For the POST requests that send a JSON body (Steps 2–3),
+> `curl` is an alias for `Invoke-WebRequest`, so the Step 1 health check types `curl.exe`
+> explicitly to get the real curl. For the POST requests that send a JSON body (Steps 2–3),
 > PowerShell mangles quoted JSON when handing it to `curl.exe` (the spaces in your SQL get
 > split into separate arguments), so the Windows snippets use the native `Invoke-RestMethod`
 > cmdlet instead — it's the reliable approach across PowerShell 5.1 and 7.x.
@@ -66,11 +66,22 @@ the later commands refer to it by name.
 > `main`). For production, pin an immutable release tag like `:0.4.3` (or a `@sha256:` digest);
 > `:0.4` floats to the newest patch within a minor. Want unreleased changes? Pull `:edge`,
 > which tracks the latest `main` build.
-Verify it's up:
 
+Wait for it to come up. The first start takes about five seconds, and a request sent before
+then fails with a connection error, so this waits for the health check rather than calling
+it once:
+
+**macOS / Linux:**
 ```bash
-curl http://localhost:8000/health
-# → {"status": "ok"}
+until curl -sf http://localhost:8000/health; do sleep 1; done
+# → {"status":"ok"}
+```
+
+**Windows (PowerShell):**
+```powershell
+while (-not (curl.exe -sf http://localhost:8000/health)) { Start-Sleep 1 }
+curl.exe http://localhost:8000/health
+# → {"status":"ok"}
 ```
 
 Then open [http://localhost:8000/docs](http://localhost:8000/docs) for the Swagger UI, and
