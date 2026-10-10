@@ -9,6 +9,35 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-10-10
+
+> Minor: a new protocol revision and new audit fields.
+
+### Added
+
+- **MCP `2026-07-28`, alongside the handshake era.** A request that names
+  `2026-07-28` (in `MCP-Protocol-Version` or in `params._meta`) follows that
+  revision's stateless rules:
+  - `server/discover` (unauthenticated) replaces `initialize`, and every
+    request carries its own version and client capabilities in `_meta`;
+  - `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` must repeat the
+    body (HTTP 400, `-32020`);
+  - an unsupported version is HTTP 400, `-32022`, naming the supported ones;
+  - an unknown method is HTTP 404, answered before authentication;
+  - an unknown tool is `-32602`;
+  - every result carries `resultType` and the server's identity in `_meta`,
+    and `tools/list` carries `ttlMs` and `cacheScope: private`.
+
+  A client that sends `initialize`, or a handshake-era header, is served
+  exactly as before on the same endpoint. The official MCP Python SDK now
+  connects in its default `auto` mode at `2026-07-28`.
+- **Audit entries name the MCP client.** Every entry written while serving
+  `/v1/mcp` carries `mcp_client` and `mcp_protocol`. A `2026-07-28` client is
+  named by its `clientInfo`; a handshake-era client by its `User-Agent`
+  (it names itself only at `initialize`, which a stateless server cannot tie
+  to later calls). Both are self-reported, and bounded to 200 characters.
+  REST entries are unchanged.
+
 ## [0.11.0] — 2026-10-10
 
 > Minor because the MCP endpoint now negotiates the protocol version and refuses
