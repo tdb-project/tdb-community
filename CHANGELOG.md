@@ -9,6 +9,20 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.2] — 2026-10-10
+
+> Patch: the row cap is applied by DuckDB again when a query ends in a comment.
+
+### Fixed
+
+- **A trailing `-- comment` no longer hides the row cap from the engine.** TDB
+  appends `LIMIT <n>` to a query that has none, and appended it on the same
+  line, so `SELECT * FROM data -- note` became `… -- note LIMIT 1001` and DuckDB
+  read the cap as part of the comment. Responses were always correct (the
+  connector reads at most `limit + 1` rows, and `truncated` was accurate), but
+  the engine computed the whole result first. The cap now goes on its own line.
+  Parity invariant P14.
+
 ## [0.9.1] — 2026-10-09
 
 > Patch: the published image no longer contains pip.

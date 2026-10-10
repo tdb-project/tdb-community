@@ -254,5 +254,6 @@ def _inject_limit(sql: str, limit: int) -> str:
     """
     normalised = sql.strip().upper()
     if "LIMIT" not in normalised:
-        return f"{sql.strip()} LIMIT {limit}"
+        # On its own line: a trailing `-- comment` would otherwise swallow it.
+        return f"{sql.strip()}\nLIMIT {limit}"
     return sql
