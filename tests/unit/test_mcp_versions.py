@@ -81,11 +81,13 @@ def test_server_info_gains_title_only_from_2025_06_18(client: TestClient) -> Non
     assert new["capabilities"] == {"tools": {"listChanged": False}}
 
 
-def test_an_unsupported_protocol_header_is_400(client: TestClient) -> None:
+def test_an_unsupported_handshake_header_is_400(client: TestClient) -> None:
+    # 2025-03-26 selects the handshake era (it is a handshake revision) but is
+    # not served there. Any other unknown value is judged by 2026-07-28 rules.
     r = client.post(
         "/v1/mcp",
         json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
-        headers={**KEY, "MCP-Protocol-Version": "1999-01-01"},
+        headers={**KEY, "MCP-Protocol-Version": "2025-03-26"},
     )
     assert r.status_code == 400
     assert "2025-11-25" in r.json()["error"]["message"]
