@@ -39,7 +39,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
 from tdb import __version__
-from tdb.audit.logger import get_logger, log_denial, log_query
+from tdb.audit.logger import get_logger, log_denial, log_query, mcp_caller
 from tdb.config import get_api_keys
 from tdb.connectors.csv import CsvConnector, SqlFileAccessError, SqlRefusedError
 from tdb.engine.validator import validate_sql
@@ -133,6 +133,10 @@ _MODERN_HTTP_STATUS = {
     -32022: 400,
     -32601: 404,
 }
+# The client's self-reported name goes into the audit log; bound what a caller
+# can write there.
+_CALLER_FIELD_MAX = 200
+_META_CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
 _B64_SENTINEL = re.compile(r"=\?base64\?(.*)\?=")
 
 
@@ -374,6 +378,29 @@ def _authenticate(request: Request, request_id: Any) -> tuple[str, JSONResponse 
 # ---------------------------------------------------------------------------
 
 
+def _caller(
+    request: Request, version: str | None = None, client_info: Any = None
+) -> dict:
+    """
+    Who the audit log says made an MCP request. A 2026-07-28 client names itself
+    on every request; a handshake-era one does so only at `initialize`, which a
+    stateless server cannot tie to later calls, so its User-Agent stands in.
+    Both are self-reported.
+    """
+    if isinstance(client_info, dict) and isinstance(client_info.get("name"), str):
+        client = client_info["name"]
+        if isinstance(client_info.get("version"), str):
+            client += "/" + client_info["version"]
+    else:
+        client = request.headers.get("user-agent", "")
+    if version is None:
+        version = request.headers.get("mcp-protocol-version") or "2024-11-05"
+    return {
+        "mcp_client": client[:_CALLER_FIELD_MAX],
+        "mcp_protocol": version[:_CALLER_FIELD_MAX],
+    }
+
+
 def _is_modern(request: Request, body: dict) -> bool:
     header = request.headers.get("mcp-protocol-version")
     if header is not None:
@@ -479,6 +506,8 @@ def _serve_modern(request: Request, body: dict) -> Response:
     rejection = _modern_rejection(request, body)
     if rejection is not None:
         return rejection
+    meta = body["params"]["_meta"]
+    mcp_caller.set(_caller(request, meta[_META_VERSION], meta.get(_META_CLIENT_INFO)))
     if method not in _MODERN_METHODS:
         return _modern_error(request_id, -32601, f"Method not found: {method}")
 
@@ -529,7 +558,7 @@ def _serve_modern(request: Request, body: dict) -> Response:
 
 
 @router.post("", include_in_schema=True, summary="MCP-compatible JSON-RPC 2.0 endpoint")
-async def mcp_endpoint(request: Request) -> JSONResponse:
+async def mcp_endpoint(request: Request) -> Response:
     """
     Model Context Protocol endpoint (JSON-RPC 2.0).
 
@@ -539,6 +568,14 @@ async def mcp_endpoint(request: Request) -> JSONResponse:
     Supported methods: `initialize`, `ping`, `tools/list`, `tools/call`, and
     from 2026-07-28 `server/discover`
     """
+    caller = mcp_caller.set(_caller(request))
+    try:
+        return await _serve(request)
+    finally:
+        mcp_caller.reset(caller)
+
+
+async def _serve(request: Request) -> Response:
     if not _origin_allowed(request):
         log_denial(action="mcp_auth", reason="invalid_origin")
         return JSONResponse(

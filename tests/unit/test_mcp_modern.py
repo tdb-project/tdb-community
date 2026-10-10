@@ -288,3 +288,98 @@ def test_the_handshake_era_still_works_after_modern_requests(
         headers=KEY,
     ).json()["result"]
     assert set(legacy) == {"content"}
+
+
+# ---------------------------------------------------------------------------
+# Who called, in the audit log
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def audit(client: TestClient):
+    from tdb.config import get_log_file
+
+    path = Path(get_log_file())
+    path.write_text("")
+    return lambda: [json.loads(line) for line in path.read_text().splitlines()]
+
+
+def test_a_modern_entry_names_the_client_and_version(client: TestClient, audit) -> None:
+    meta = {
+        **META,
+        "io.modelcontextprotocol/clientInfo": {"name": "agent", "version": "2.1"},
+    }
+    r = client.post(
+        "/v1/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "_meta": meta,
+                "name": "query_source",
+                "arguments": {"sql": "SELECT * FROM data"},
+            },
+        },
+        headers=_headers("tools/call", "query_source"),
+    )
+    assert r.status_code == 200
+    (entry,) = audit()
+    assert entry["event"] == "query"
+    assert (entry["mcp_client"], entry["mcp_protocol"]) == ("agent/2.1", V)
+
+
+@pytest.mark.parametrize(
+    ("version", "logged"), [("2025-06-18", "2025-06-18"), (None, "2024-11-05")]
+)
+def test_a_handshake_entry_names_the_user_agent(
+    client: TestClient, audit, version: str | None, logged: str
+) -> None:
+    headers = {**KEY, "User-Agent": "Cursor/1.7"}
+    if version:
+        headers["MCP-Protocol-Version"] = version
+    client.post(
+        "/v1/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "query_source",
+                "arguments": {"sql": "SELECT * FROM data"},
+            },
+        },
+        headers=headers,
+    )
+    (entry,) = audit()
+    assert (entry["mcp_client"], entry["mcp_protocol"]) == ("Cursor/1.7", logged)
+
+
+def test_a_refused_mcp_request_names_the_client(client: TestClient, audit) -> None:
+    client.post(
+        "/v1/mcp",
+        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        headers={"Authorization": "Bearer wrong", "User-Agent": "probe/0"},
+    )
+    (entry,) = audit()
+    assert entry["event"] == "denied"
+    assert entry["mcp_client"] == "probe/0"
+
+
+def test_the_client_name_is_bounded(client: TestClient, audit) -> None:
+    client.post(
+        "/v1/mcp",
+        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        headers={"Authorization": "Bearer wrong", "User-Agent": "x" * 5000},
+    )
+    (entry,) = audit()
+    assert len(entry["mcp_client"]) == 200
+
+
+def test_a_rest_entry_has_no_mcp_fields(client: TestClient, audit) -> None:
+    r = client.post(
+        "/v1/query", json={"source_id": "d", "sql": "SELECT * FROM data"}, headers=KEY
+    )
+    assert r.status_code == 200
+    (entry,) = audit()
+    assert "mcp_client" not in entry and "mcp_protocol" not in entry
