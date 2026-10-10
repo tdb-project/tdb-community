@@ -9,6 +9,30 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-10-10
+
+> Minor because the MCP endpoint now negotiates the protocol version and refuses
+> an unsupported `MCP-Protocol-Version` header (400).
+
+### Added
+
+- **MCP protocol versions `2025-11-25` and `2025-06-18`.** `initialize` answers
+  with the version the client asked for when TDB supports it, otherwise the
+  newest supported version older than the request, otherwise `2024-11-05`. A
+  client never receives a version newer than it asked for. `2025-03-26` is
+  answered with `2024-11-05`, as before, because that revision requires
+  accepting JSON-RPC batches, which TDB refuses.
+- **`MCP-Protocol-Version` is validated.** An unsupported value is HTTP 400
+  with `-32600` and the supported list. A request without the header is
+  served as before.
+- **Tool metadata and structured output, from `2025-06-18`.** When the request
+  header names `2025-06-18` or later, `query_source` carries a `title`,
+  `annotations` (`readOnlyHint: true`, `openWorldHint: false`) and an
+  `outputSchema`, and a successful call carries `structuredContent` alongside
+  the unchanged JSON text block. `initialize` adds `serverInfo.title` and
+  `description`, and `capabilities.tools.listChanged: false`. A client on
+  `2024-11-05`, or sending no header, receives exactly what it did in 0.10.0.
+
 ## [0.10.0] — 2026-10-10
 
 > Minor because `ping` now succeeds and a cross-site `Origin` is now refused (403).

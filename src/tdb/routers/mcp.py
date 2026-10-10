@@ -22,6 +22,7 @@ presenting credentials.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -69,6 +70,67 @@ _TOOL_SPEC = {
 }
 
 
+# Revisions this server speaks, newest first. 2025-03-26 is left out on
+# purpose: it obliges servers to accept JSON-RPC batches, which this endpoint
+# refuses. A client asking for it is answered with 2024-11-05, as before.
+_SUPPORTED_VERSIONS = ("2025-11-25", "2025-06-18", "2024-11-05")
+
+# Tool titles, annotations and structured output are sent only to a client
+# whose MCP-Protocol-Version header names 2025-06-18 or later, so a 2024-11-05
+# client receives exactly what it always did.
+_STRUCTURED_FROM = "2025-06-18"
+
+_READ_ONLY = {"readOnlyHint": True, "openWorldHint": False}
+
+_ROWS_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "source": {"type": "string"},
+        "columns": {"type": "array", "items": {"type": "string"}},
+        "rows": {"type": "array", "items": {"type": "object"}},
+        "rows_returned": {"type": "integer"},
+        "truncated": {"type": "boolean"},
+    },
+    "required": ["source", "columns", "rows", "rows_returned", "truncated"],
+}
+
+_TOOL_METADATA = {
+    "query_source": {
+        "title": "Query a data source",
+        "annotations": _READ_ONLY,
+        "outputSchema": _ROWS_OUTPUT_SCHEMA,
+    },
+}
+
+
+def _negotiate(requested: Any) -> str:
+    """
+    The version to answer `initialize` with: the requested one if supported,
+    else the newest supported one older than it, so a client is never handed a
+    revision newer than it asked for, else the oldest.
+    """
+    if isinstance(requested, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", requested):
+        for version in _SUPPORTED_VERSIONS:
+            if version <= requested:
+                return version
+    return _SUPPORTED_VERSIONS[-1]
+
+
+def _with_structure(method: str, response: dict) -> dict:
+    result = response.get("result")
+    if not isinstance(result, dict):
+        return response
+    if method == "tools/list":
+        result["tools"] = [
+            {**tool, **_TOOL_METADATA.get(tool["name"], {})} for tool in result["tools"]
+        ]
+    elif method == "tools/call" and not result.get("isError"):
+        # Parsed from the text block the client also receives, so the two can
+        # never disagree.
+        result["structuredContent"] = json.loads(result["content"][0]["text"])
+    return response
+
+
 # ---------------------------------------------------------------------------
 # JSON-RPC helpers
 # ---------------------------------------------------------------------------
@@ -104,13 +166,22 @@ def _tool_ok(request_id: Any, payload: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _handle_initialize(request_id: Any, _params: dict) -> dict:
+def _handle_initialize(request_id: Any, params: dict) -> dict:
+    version = _negotiate(params.get("protocolVersion"))
+    server_info: dict = {"name": "tdb-community", "version": __version__}
+    capabilities: dict = {"tools": {}}
+    if version >= _STRUCTURED_FROM:
+        server_info["title"] = "TDB Community"
+        server_info["description"] = (
+            "Governed, audited, read-only SQL over a registered CSV source."
+        )
+        capabilities = {"tools": {"listChanged": False}}
     return _ok(
         request_id,
         {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {"tools": {}},
-            "serverInfo": {"name": "tdb-community", "version": __version__},
+            "protocolVersion": version,
+            "capabilities": capabilities,
+            "serverInfo": server_info,
         },
     )
 
@@ -280,6 +351,19 @@ async def mcp_endpoint(request: Request) -> JSONResponse:
     if body.get("jsonrpc") != "2.0":
         return JSONResponse(_err(body.get("id"), -32600, "Invalid JSON-RPC version"))
 
+    header_version = request.headers.get("mcp-protocol-version")
+    if header_version is not None and header_version not in _SUPPORTED_VERSIONS:
+        return JSONResponse(
+            _err(
+                body.get("id"),
+                -32600,
+                f"Unsupported MCP-Protocol-Version: {header_version}. "
+                f"Supported: {', '.join(_SUPPORTED_VERSIONS)}",
+            ),
+            status_code=400,
+        )
+    structured = header_version is not None and header_version >= _STRUCTURED_FROM
+
     # A notification, or a client's response to a server request: nothing to
     # answer. Replying to one is a protocol error the client has to tolerate.
     if "id" not in body or "method" not in body:
@@ -316,5 +400,9 @@ async def mcp_endpoint(request: Request) -> JSONResponse:
             )
 
     if method == "tools/call":
-        return JSONResponse(handler(request_id, params, token))
-    return JSONResponse(handler(request_id, params))
+        response = handler(request_id, params, token)
+    else:
+        response = handler(request_id, params)
+    if structured:
+        response = _with_structure(method, response)
+    return JSONResponse(response)
