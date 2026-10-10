@@ -192,6 +192,7 @@ Each line is a self-contained JSON object — one attempt, one line:
 | `rows_returned` | Row count in the response (after the 1,000-row cap). `"query"` events only. |
 | `key_hint` | First 6 characters of the API key used, then `…`. **The raw key is never written** — this is only enough to tell two keys apart. |
 | `ts` | UTC timestamp, ISO-8601 with a `+00:00` offset so SIEM tools and log parsers place it correctly. |
+| `mcp_client`, `mcp_protocol` | MCP requests only: which AI client made the call (its self-reported name, or its `User-Agent`) and the MCP protocol version it used. |
 
 **Denied attempts are audit events too.** Anything refused — a bad API key, a
 non-`SELECT` statement, an unknown source, a file outside `TDB_ALLOWED_DATA_DIR` —
@@ -288,6 +289,11 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8000/v1/mcp `
 ```
 
 A successful response returns a JSON-RPC result with `serverInfo` and `capabilities`.
+
+TDB speaks MCP `2024-11-05`, `2025-06-18`, `2025-11-25` and `2026-07-28` on this
+one endpoint, so older and current clients both connect unchanged. See the
+[MCP reference](https://docs.tdb.jiracorp.co.in/api/mcp/#protocol-versions) for
+what each version adds.
 
 ---
 

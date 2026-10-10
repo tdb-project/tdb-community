@@ -6,8 +6,11 @@ Only the latest release receives security patches. No backports to older version
 
 | Version | Supported |
 |---------|-----------|
-| 0.7.x   | Yes       |
-| < 0.7   | No        |
+| Latest release | Yes |
+| Anything older | No  |
+
+Upgrade to the latest release to receive a fix. Releases are listed in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Reporting a Vulnerability
 
