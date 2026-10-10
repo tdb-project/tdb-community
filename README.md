@@ -518,39 +518,39 @@ of `SELECT *`).
 
 ---
 
-## What's Included (v0.4.3)
+## What's Included
 
 | Feature | Details |
 |---|---|
-| CSV data source | One registered source at a time |
+| CSV data source | One registered source at a time, confined to the data directory |
 | Auto schema detection | Column names and types inferred from CSV |
-| SQL query endpoint | `SELECT` only — `DELETE`, `UPDATE`, `DROP` are blocked |
-| Row limit | Max 1,000 rows per response |
+| SQL query endpoint | Read-only: `SELECT` and `WITH` only, one statement per query; writes are refused and audited |
+| Row limit | Max 1,000 rows per response, with `truncated` telling you when rows were withheld |
 | API key auth | `Authorization: Bearer <key>` — single static key |
-| MCP server | One tool: `query_source` — compatible with Claude, Cursor, Continue |
-| Audit log | Every query logged to NDJSON file (`TDB_LOG_FILE`) |
+| MCP server | One tool, `query_source`, for Claude, Cursor, VS Code and other MCP clients; speaks MCP `2026-07-28` and the earlier handshake revisions |
+| Audit log | Every query and every refused attempt, as NDJSON (`TDB_LOG_FILE`); MCP entries name the AI client |
 | CLI | `tdb serve`, `tdb register`, `tdb query` |
-| Docker Compose | One-command install on Windows, macOS, and Linux |
+| Docker | One `docker run`, or Docker Compose for a persistent setup |
 | OpenAPI / Swagger | Auto-generated at `/docs` |
 
 ---
 
 ## Community vs Enterprise
 
-| Feature | Community (this repo) | Enterprise |
+| | Community (this repo) | Enterprise |
 |---|---|---|
-| CSV connector | One source at a time | Unlimited sources |
-| PostgreSQL / SQL Server / Snowflake | — | All connectors |
-| API key auth | Single static key | Key rotation + management UI |
-| OAuth 2.1 / PKCE (for Claude, Cursor) | — | Included |
-| SSO / SAML / SCIM | — | Included |
-| MCP tools | `query_source` only | Schema, preview, filter, aggregate |
-| Audit log | Local NDJSON file | SIEM export (Splunk, Datadog, S3) |
-| Immutable signed audit records (SOC 2) | — | Included |
-| RBAC / column-level / row-level access | — | Included |
-| PII detection and masking | — | Included |
-| Admin Web UI | — | Included |
-| Prometheus metrics | — | Included |
+| Data sources | One CSV source | CSV, PostgreSQL, MySQL, SQL Server, Snowflake; unlimited sources |
+| Auth | Single static API key | Key rotation and management, JWT, OAuth 2.1 with PKCE, per-key rate limits |
+| Access control | — | RBAC (read / readwrite / admin), MCP tool allow-lists per key |
+| MCP | `query_source` | Seven tools, prompt-injection filtering, schema annotations |
+| SQL clients and BI tools | — | PostgreSQL wire gateway: Metabase, DBeaver, `psql` connect unchanged |
+| Named views | — | YAML views with typed parameters |
+| Row limit | 1,000 per response | 1,000 by default, configurable |
+| Audit log | Local NDJSON | Hash-chained and verifiable, sealed-segment retention, Splunk and S3 export |
+| Observability | Health check | Prometheus metrics, schema caching |
+
+On the roadmap and **not in either edition yet**: SSO / SAML / SCIM and column-level
+access control.
 
 See the [full edition comparison](https://docs.tdb.jiracorp.co.in/pricing/) — email <hello@tdb.jiracorp.co.in> for pricing and a free 30-day evaluation.
 
