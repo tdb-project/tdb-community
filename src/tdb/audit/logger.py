@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+from contextvars import ContextVar
 from datetime import UTC, datetime
 
 from tdb.config import get_log_file
+
+# Which MCP client wrote an entry, and at what protocol version: set by the MCP
+# endpoint for the request it serves, unset on every other path.
+mcp_caller: ContextVar[dict | None] = ContextVar("mcp_caller", default=None)
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -25,6 +30,7 @@ def log_query(source_id: str, sql: str, rows_returned: int, key_hint: str = "") 
             "sql": sql,
             "rows_returned": rows_returned,
             "key_hint": key_hint,
+            **(mcp_caller.get() or {}),
             "ts": datetime.now(UTC).isoformat(),
         }
     )
@@ -50,6 +56,7 @@ def log_denial(
             "source_id": source_id,
             "sql": sql,
             "key_hint": key_hint,
+            **(mcp_caller.get() or {}),
             "ts": datetime.now(UTC).isoformat(),
         }
     )
