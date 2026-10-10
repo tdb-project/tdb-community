@@ -63,8 +63,8 @@ docker run -d --rm --name tdb -p 8000:8000 `
 the later commands refer to it by name.
 
 > **Image tags.** `:latest` always points to the newest **stable release** (not the tip of
-> `main`). For production, pin an immutable release tag like `:0.4.3` (or a `@sha256:` digest);
-> `:0.4` floats to the newest patch within a minor. Want unreleased changes? Pull `:edge`,
+> `main`). For production, pin an immutable release tag like `:0.12.0` (or a `@sha256:` digest);
+> `:0.12` floats to the newest patch within a minor. Want unreleased changes? Pull `:edge`,
 > which tracks the latest `main` build.
 
 Wait for it to come up. The first start takes about five seconds, and a request sent before
