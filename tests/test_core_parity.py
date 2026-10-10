@@ -540,3 +540,20 @@ class TestP13AKeywordAliasIsNotAWrite:
         assert not validate_sql(
             "WITH x AS (DELETE FROM t RETURNING *) SELECT * FROM x"
         ).is_valid
+
+
+class TestP14InjectedLimitSurvivesATrailingComment:
+    """
+    P14 — the injected row cap is not swallowed by a trailing `-- comment`.
+    `SELECT … -- note` once became `… -- note LIMIT 6`, so the engine computed
+    the whole result; fetchmany() still bounded the response, so only the
+    source's work showed it.
+    """
+
+    def test_the_engine_stops_at_the_cap(self) -> None:
+        import duckdb
+
+        import tdb.connectors.csv as csv_mod
+
+        sql = csv_mod._inject_limit("SELECT * FROM range(100000) -- note", 6)
+        assert len(duckdb.sql(sql).fetchall()) == 6
