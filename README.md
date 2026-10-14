@@ -310,6 +310,11 @@ what each version adds.
 
 ### VS Code (Copilot / MCP extension)
 
+**Easiest:** install the free [TDB extension](https://marketplace.visualstudio.com/items?itemName=tdb-project.tdb-vscode)
+(also on [Open VSX](https://open-vsx.org/extension/tdb-project/tdb-vscode)), run
+**TDB: Connect to Server**, and enter `http://localhost:8000` and your key. The key is
+kept in VS Code's secret storage. To configure it by hand instead:
+
 Open or create `%APPDATA%\Code\User\mcp.json` (Windows) or `~/.config/Code/User/mcp.json` (Mac/Linux):
 
 ```json
