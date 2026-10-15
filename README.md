@@ -170,9 +170,10 @@ fine.
 ### Step 4 — Connect an AI tool (MCP)
 
 TDB exposes a standard [MCP](https://modelcontextprotocol.io) endpoint at `/v1/mcp`. The
-Community Edition ships one tool, `query_source`. See
-[Connecting an MCP Client](#connecting-an-mcp-client) below for Claude Desktop, Cursor, and
-VS Code configuration.
+Community Edition ships one tool, `query_source`. In VS Code, the free
+[TDB extension](https://marketplace.visualstudio.com/items?itemName=tdb-project.tdb-vscode)
+connects in one command. See [Connecting an MCP Client](#connecting-an-mcp-client) below
+for Claude Code, Claude Desktop, Cursor, VS Code and other clients.
 
 ### Step 5 — Check the audit log
 
@@ -324,12 +325,17 @@ Open or create `%APPDATA%\Code\User\mcp.json` (Windows) or `~/.config/Code/User/
       "type": "http",
       "url": "http://localhost:8000/v1/mcp",
       "headers": {
-        "Authorization": "Bearer YOUR_API_KEY"
+        "Authorization": "Bearer YOUR_API_KEY",
+        "MCP-Protocol-Version": "2025-11-25"
       }
     }
   }
 }
 ```
+
+VS Code agrees `2025-11-25` with the server but never repeats the `MCP-Protocol-Version`
+header, so without that line TDB answers later requests as `2024-11-05` and your agent
+misses tool titles, read-only hints and structured results. The extension adds it for you.
 
 Save the file, then open the Command Palette (`Ctrl+Shift+P`) and run **MCP: List Servers** to confirm `tdb` shows as connected.
 
@@ -337,6 +343,16 @@ Save the file, then open the Command Palette (`Ctrl+Shift+P`) and run **MCP: Lis
 > persistent process, and will produce an `ENOENT` or immediate disconnect error.
 
 ---
+
+### Claude Code
+
+```bash
+claude mcp add --transport http tdb http://localhost:8000/v1/mcp --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+Run `claude mcp list` to confirm `tdb` shows as connected. The default `local` scope keeps
+the key in your user configuration, not in the project. Claude Code connects on MCP
+`2026-07-28`, the newest revision (tested with Claude Code 2.1.300).
 
 ### Claude Desktop
 
