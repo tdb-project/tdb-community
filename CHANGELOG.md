@@ -9,6 +9,22 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.1] — 2026-10-26
+
+> Patch: a dependency refresh and nothing else. No behaviour, API or
+> configuration change. Clears a critical-rated advisory from scans of the
+> published image.
+
+### Security
+
+- **`certifi` raised to 2026.10.19** for GHSA-6q48-6c7w-9gw2 / PYSEC-2026-4320
+  (critical — the bundle trusted emSign root CAs whose intermediate CA keys were
+  compromised). The server makes no outbound TLS connection, so it is not exposed.
+  The one user of certifi's bundle is the `tdb` CLI's client, which connects to
+  the TDB server you point it at; over HTTPS, an on-path attacker holding a
+  certificate from the compromised intermediate could have impersonated that
+  server.
+
 ## [0.12.0] — 2026-10-10
 
 > Minor: a new protocol revision and new audit fields.
