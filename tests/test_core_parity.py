@@ -557,3 +557,40 @@ class TestP14InjectedLimitSurvivesATrailingComment:
 
         sql = csv_mod._inject_limit("SELECT * FROM range(100000) -- note", 6)
         assert len(duckdb.sql(sql).fetchall()) == 6
+
+
+class TestP15ResultValuesAreJson:
+    """
+    P15 — every value a connector returns is plain JSON, the same on REST and MCP.
+    A binary value made REST fail to encode after the query ran and was audited;
+    NaN was `null` on REST and an invalid bare `NaN` token on MCP; timestamps and
+    intervals were spelled differently on each path.
+    """
+
+    @pytest.mark.parametrize(
+        ("expr", "want"),
+        [
+            ("from_hex('00ff')", "AP8="),
+            ("'nan'::DOUBLE", "NaN"),
+            ("'inf'::DOUBLE", "Infinity"),
+            ("'-inf'::DOUBLE", "-Infinity"),
+            ("1.5::DOUBLE", 1.5),
+            ("0.10::DECIMAL(10,2)", "0.10"),
+            (
+                "'4b48af8e-b7dd-45e2-836e-e8efa86e41c2'::UUID",
+                "4b48af8e-b7dd-45e2-836e-e8efa86e41c2",
+            ),
+            ("DATE '2026-01-01'", "2026-01-01"),
+            ("TIMESTAMP '2026-01-01 10:00:00.5'", "2026-01-01T10:00:00.500000"),
+            ("TIME '10:00:00'", "10:00:00"),
+            ("INTERVAL 1 DAY", "P1D"),
+            ("[from_hex('00ff')]", ["AP8="]),
+            ("{'b': from_hex('00ff'), 'n': 'nan'::DOUBLE}", {"b": "AP8=", "n": "NaN"}),
+            ("NULL", None),
+        ],
+    )
+    def test_value(self, tmp_path: Path, expr: str, want: object) -> None:
+        c = CsvConnector(connection={"file_path": _csv(tmp_path, 1)})
+        rows = c.execute(f"SELECT {expr} AS v FROM data", limit=1).rows
+        assert rows == [{"v": want}]
+        json.dumps(rows, allow_nan=False)

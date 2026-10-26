@@ -9,6 +9,31 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.2] — 2026-10-26
+
+> Patch: fixes how query results are encoded as JSON. REST output changes only where it
+> was wrong (binary values, NaN/Infinity). MCP timestamp and interval text now match
+> REST.
+
+### Fixed
+
+- **A binary value no longer breaks the REST response.** `POST /v1/query` with SQL
+  returning bytes, for example `SELECT from_hex('00ff') FROM data`, failed to encode
+  the response after the query had run and been written to the audit log as a
+  successful `query`. Binary values are now returned as **base64** text, on REST and MCP
+  alike; MCP used to print a Python `b'...'` literal.
+- **NaN and Infinity are distinguishable from NULL, and MCP output is valid JSON.**
+  REST returned `null` for `NaN` and `±Infinity`, the same as SQL NULL, and MCP wrote
+  bare `NaN` / `Infinity` tokens, which are not JSON: a strict parser such as
+  JavaScript's `JSON.parse` rejected the whole tool result. Both now return the strings
+  `"NaN"`, `"Infinity"` and `"-Infinity"`, as PostgreSQL's `to_json` does.
+- **REST and MCP spell values the same way.** MCP now uses REST's existing forms:
+  timestamps `2026-01-01T10:00:00` (was `2026-01-01 10:00:00`), intervals as ISO 8601
+  durations `P1D` (was `1 day, 0:00:00`). REST output for these types is unchanged.
+
+The conversion happens once, where a connector hands back its rows, so every path
+returns the same JSON. Parity invariant **P15**.
+
 ## [0.12.1] — 2026-10-26
 
 > Patch: a dependency refresh and nothing else. No behaviour, API or

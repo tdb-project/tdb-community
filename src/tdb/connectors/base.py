@@ -11,6 +11,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
+from tdb.connectors.values import json_safe_rows
+
 
 @dataclass
 class ConnectorResult:
@@ -24,6 +26,11 @@ class ConnectorResult:
     columns: list[str]
     rows: list[dict[str, Any]]
     truncated: bool = False
+
+    def __post_init__(self) -> None:
+        # Here rather than in each router, so REST and MCP send the same JSON.
+        # See tdb.connectors.values.
+        self.rows = json_safe_rows(self.rows)
 
 
 class BaseConnector(ABC):
