@@ -63,7 +63,7 @@ docker run -d --rm --name tdb -p 8000:8000 `
 the later commands refer to it by name.
 
 > **Image tags.** `:latest` always points to the newest **stable release** (not the tip of
-> `main`). For production, pin an immutable release tag like `:0.12.0` (or a `@sha256:` digest);
+> `main`). For production, pin an immutable release tag like `:0.12.1` (or a `@sha256:` digest);
 > `:0.12` floats to the newest patch within a minor. Want unreleased changes? Pull `:edge`,
 > which tracks the latest `main` build.
 
@@ -346,34 +346,35 @@ Save the file, then open the Command Palette (`Ctrl+Shift+P`) and run **MCP: Lis
 
 ### Claude Code
 
+Install the TDB plugin in a terminal (Claude Code 2.1.292 or later):
+
+```bash
+claude plugin install tdb --marketplace tdb-project/tdb-connectors
+```
+
+Then, in Claude Code, run `/plugin configure tdb@tdb-connectors` to enter
+`http://localhost:8000` and your key, and `/reload-plugins` to connect. `/mcp` should show
+`tdb` as connected. The key goes into your system's credential store, not into settings.
+
+Or add the server by hand:
+
 ```bash
 claude mcp add --transport http tdb http://localhost:8000/v1/mcp --header "Authorization: Bearer YOUR_API_KEY"
 ```
 
-Run `claude mcp list` to confirm `tdb` shows as connected. The default `local` scope keeps
-the key in your user configuration, not in the project. Claude Code connects on MCP
-`2026-07-28`, the newest revision (tested with Claude Code 2.1.300).
+The default `local` scope keeps the key in your user configuration, not in the project.
+Claude Code connects on MCP `2026-07-28`, the newest revision (tested with Claude Code
+2.1.310); the audit log names it `claude-code/<version>`.
 
 ### Claude Desktop
 
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (Mac) or
-`%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+Download `tdb.mcpb` from the
+[latest tdb-connectors release](https://github.com/tdb-project/tdb-connectors/releases/latest)
+and open it to install. Then enter `http://localhost:8000` and your key in **Settings →
+Extensions → The Data-Bridge (TDB)**. The `query_source` tool will appear in the tools list.
 
-```json
-{
-  "mcpServers": {
-    "tdb": {
-      "type": "http",
-      "url": "http://localhost:8000/v1/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_API_KEY"
-      }
-    }
-  }
-}
-```
-
-Restart Claude Desktop. The `query_source` tool will appear in the tools list.
+A `url` entry in `claude_desktop_config.json` does not connect: that file is for local
+servers Claude Desktop starts itself.
 
 ---
 
@@ -400,7 +401,7 @@ Open **Cursor Settings → MCP** and add a new server, or edit `.cursor/mcp.json
 ### Windsurf (Cascade)
 
 Edit `~/.codeium/windsurf/mcp_config.json`. Windsurf uses `serverUrl`, **not** `url` —
-pasting the Claude Desktop/Cursor block above as-is will silently fail to connect:
+pasting the Cursor block above as-is will silently fail to connect:
 
 ```json
 {
