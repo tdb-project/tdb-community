@@ -9,6 +9,16 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A mistake in the caller's SQL is a 400, not a 500.** An unknown column or table,
+  a syntax error the engine reports, or a value that does not convert (for example
+  `CAST(note AS INTEGER)` on text) returned **500** `Query execution failed`, which
+  reads as a server fault and invites retries. It is now **400** `Query failed: …`
+  with the engine's message, logged at WARNING rather than ERROR. Engine faults
+  (out of memory, internal errors, I/O) are still 500. MCP already returned these as
+  tool errors and is unchanged. Parity invariant **P17**.
+
 ## [0.12.3] — 2026-10-27
 
 > Patch: TDB's application log escapes line breaks in what it logs, so a caller-supplied

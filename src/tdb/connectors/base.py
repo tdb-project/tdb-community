@@ -14,6 +14,18 @@ from typing import Any
 from tdb.connectors.values import json_safe_rows
 
 
+class QueryError(Exception):
+    """
+    The source rejected the caller's SQL: an unknown column or table, a syntax
+    error, a value that does not convert.
+
+    Each connector translates its own driver's errors for these into this, so the
+    routers can answer 400 instead of letting the caller's mistake fall into the
+    generic 500 path. What counts as the caller's mistake is decided by the
+    connector that knows its driver; the routers never inspect driver errors.
+    """
+
+
 @dataclass
 class ConnectorResult:
     """
