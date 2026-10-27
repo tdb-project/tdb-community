@@ -9,6 +9,11 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.4] — 2026-10-27
+
+> Patch: a mistake in the caller's SQL (unknown column or table, a value that does not
+> convert) is a 400 with the engine's message, not a 500. Engine faults are still 500.
+
 ### Fixed
 
 - **A mistake in the caller's SQL is a 400, not a 500.** An unknown column or table,
