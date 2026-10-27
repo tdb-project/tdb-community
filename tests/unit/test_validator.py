@@ -172,9 +172,11 @@ class TestCtesAndLeadingComments:
             "WITH a AS (SELECT 1) SELECT * FROM a",
             "with a as (select 1) select * from a",
             "  WITH a AS (SELECT 1) SELECT * FROM a  ",
-            "WITH RECURSIVE t(n) AS ("
-            "SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 5"
-            ") SELECT n FROM t",
+            (
+                "WITH RECURSIVE t(n) AS ("
+                "SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 5"
+                ") SELECT n FROM t"
+            ),
             "WITH a AS (SELECT 1), b AS (SELECT 2) SELECT * FROM a, b",
             "/* leading block comment */ SELECT 1",
             "-- leading line comment\nSELECT 1",

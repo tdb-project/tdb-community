@@ -11,10 +11,22 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- **Log lines cannot be forged through caller input.** Source names, SQL fragments
+  and engine errors are written into TDB's plain-text application log; a value
+  containing a line break could start a fake log line. Line breaks in TDB's own
+  log messages and their arguments are now escaped (`\n`, `\r`) when the record
+  is created, so every logger and handler is covered. Ordinary values log exactly
+  as before; tracebacks are unchanged; the signed audit log (JSON) was never
+  affected. Parity invariant **P16**.
+- **CI only:** the five third-party actions in the image-publishing workflow are
+  pinned to commit SHAs (they followed moving tags such as `@v3`), and Dependabot
+  now proposes monthly updates for them. Test code cleaned of four CodeQL quality
+  notes; no behaviour change.
 - **CI only — no change to the package or image.** The CI workflow's `GITHUB_TOKEN`
   is now read-only (`permissions: contents: read`); it had the repository default.
   CodeQL now also analyses the GitHub Actions workflows and runs the
-  `security-and-quality` query suite; both found nothing new.
+  `security-and-quality` query suite; its first full run on `main` found the items
+  fixed above.
 
 ## [0.12.2] — 2026-10-26
 

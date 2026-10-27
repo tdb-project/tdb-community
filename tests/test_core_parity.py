@@ -24,7 +24,9 @@ it with the reason — a silent gap is the thing this file exists to prevent.
 from __future__ import annotations
 
 import csv
+import importlib
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -553,7 +555,7 @@ class TestP14InjectedLimitSurvivesATrailingComment:
     def test_the_engine_stops_at_the_cap(self) -> None:
         import duckdb
 
-        import tdb.connectors.csv as csv_mod
+        csv_mod = importlib.import_module("tdb.connectors.csv")
 
         sql = csv_mod._inject_limit("SELECT * FROM range(100000) -- note", 6)
         assert len(duckdb.sql(sql).fetchall()) == 6
@@ -594,3 +596,44 @@ class TestP15ResultValuesAreJson:
         rows = c.execute(f"SELECT {expr} AS v FROM data", limit=1).rows
         assert rows == [{"v": want}]
         json.dumps(rows, allow_nan=False)
+
+
+class TestP16LogLinesCannotBeForged:
+    """
+    P16 — a caller-supplied value with a line break cannot start a new line in
+    TDB's text logs. Source names, SQL fragments and driver errors reach the log
+    as `%s` arguments, and the handlers are plain text.
+    """
+
+    def _message(
+        self, caplog: pytest.LogCaptureFixture, name: str, *args: object
+    ) -> str:
+
+        importlib.import_module("tdb.audit.logger")
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger=name):
+            logging.getLogger(name).warning(
+                "query_rejected source_id=%s reason=%s", *args
+            )
+        return caplog.records[-1].getMessage()
+
+    def test_arguments_are_escaped(self, caplog: pytest.LogCaptureFixture) -> None:
+        forged = "x\nWARNING:     query_executed source_id=admin"
+        msg = self._message(caplog, "tdb.routers.query", forged, ValueError("a\r\nb"))
+        assert "\n" not in msg and "\r" not in msg
+        assert msg == (
+            "query_rejected source_id=x\\nWARNING:     query_executed source_id=admin "
+            "reason=a\\r\\nb"
+        )
+
+    def test_reloading_the_module_does_not_wrap_the_factory_again(self) -> None:
+
+        importlib.import_module("tdb.audit.logger")
+        before = logging.getLogRecordFactory()
+        importlib.reload(importlib.import_module("tdb.audit.logger"))
+        assert logging.getLogRecordFactory() is before
+
+    def test_other_loggers_are_left_alone(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        assert "\n" in self._message(caplog, "uvicorn.error", "a\nb", "c")

@@ -39,6 +39,7 @@ it is not enterprise-specific.
 
 from __future__ import annotations
 
+import importlib
 import json
 from pathlib import Path
 
@@ -55,7 +56,7 @@ _API_KEY = "test-key-abc"
 @pytest.fixture
 def cli_app():
     """The CLI app, resolved now rather than at import time (see module docstring)."""
-    import tdb.cli.main as cli_main
+    cli_main = importlib.import_module("tdb.cli.main")
 
     return cli_main.app
 
@@ -63,7 +64,7 @@ def cli_app():
 @pytest.fixture
 def cli(monkeypatch: pytest.MonkeyPatch):
     """The CLI app with its HTTP client pointed at the real FastAPI app."""
-    import tdb.cli.main as cli_main
+    cli_main = importlib.import_module("tdb.cli.main")
     from tdb.main import app as fastapi_app
 
     def _make_client() -> httpx.Client:
