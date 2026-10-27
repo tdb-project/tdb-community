@@ -637,3 +637,105 @@ class TestP16LogLinesCannotBeForged:
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         assert "\n" in self._message(caplog, "uvicorn.error", "a\nb", "c")
+
+
+class TestP17CallerSqlErrorsAre400:
+    """
+    P17 — SQL the source rejects as the caller's mistake (unknown column or table,
+    a value that does not convert) is a 400, not a 500. Anything else the
+    connector raises is still a 500.
+    """
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "SELECT no_such_column FROM data",
+            "SELECT * FROM data JOIN no_such_table USING (id)",
+            "SELECT CAST(note AS INTEGER) FROM data",
+        ],
+    )
+    def test_the_callers_mistake_is_a_400(self, tmp_path: Path, sql: str) -> None:
+        reg = client.post(
+            "/v1/sources",
+            headers=HEADERS,
+            json={
+                "name": "p17",
+                "source_type": "csv",
+                "connection": {"file_path": _csv(tmp_path, 3)},
+            },
+        )
+        try:
+            assert reg.status_code == 201, reg.text
+            r = client.post(
+                "/v1/query",
+                headers=HEADERS,
+                json={"source_id": reg.json()["id"], "sql": sql},
+            )
+            assert r.status_code == 400, r.text
+            assert r.json()["detail"].startswith("Query failed: "), r.text
+        finally:
+            client.delete(f"/v1/sources/{reg.json().get('id', '')}", headers=HEADERS)
+
+    @pytest.mark.parametrize(
+        "fault", ["OutOfMemoryException", "InternalException", "IOException"]
+    )
+    def test_an_engine_fault_is_not_reported_as_the_callers_mistake(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fault: str
+    ) -> None:
+        import duckdb
+
+        csv_mod = importlib.import_module("tdb.connectors.csv")
+        base = importlib.import_module("tdb.connectors.base")
+        real_engine = csv_mod._engine
+
+        class FaultyCursor:
+            def __init__(self, cur: duckdb.DuckDBPyConnection) -> None:
+                self._cur = cur
+
+            def __getattr__(self, name: str) -> object:
+                return getattr(self._cur, name)
+
+            def execute(self, sql: str) -> None:
+                raise getattr(duckdb, fault)("engine fault")
+
+        class FaultyEngine:
+            def __init__(self, root: str) -> None:
+                self._engine = real_engine(root)
+
+            def cursor(self) -> FaultyCursor:
+                return FaultyCursor(self._engine.cursor())
+
+        monkeypatch.setattr(csv_mod, "_engine", FaultyEngine)
+        c = csv_mod.CsvConnector(connection={"file_path": _csv(tmp_path, 1)})
+        with pytest.raises(getattr(duckdb, fault)) as caught:
+            c.execute("SELECT * FROM data", limit=1)
+        assert not isinstance(caught.value, base.QueryError)
+
+    def test_a_server_fault_is_still_a_500(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        csv_mod = importlib.import_module("tdb.connectors.csv")
+
+        def broken(self, sql: str, limit: int = 100) -> None:
+            raise RuntimeError("engine fault")
+
+        monkeypatch.setattr(csv_mod.CsvConnector, "execute", broken)
+        reg = client.post(
+            "/v1/sources",
+            headers=HEADERS,
+            json={
+                "name": "p17",
+                "source_type": "csv",
+                "connection": {"file_path": _csv(tmp_path, 3)},
+            },
+        )
+        try:
+            assert reg.status_code == 201, reg.text
+            r = client.post(
+                "/v1/query",
+                headers=HEADERS,
+                json={"source_id": reg.json()["id"], "sql": "SELECT * FROM data"},
+            )
+            assert r.status_code == 500, r.text
+        finally:
+            client.delete(f"/v1/sources/{reg.json().get('id', '')}", headers=HEADERS)

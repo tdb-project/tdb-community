@@ -34,7 +34,7 @@ from typing import Any
 import duckdb
 
 from tdb.config import get_allowed_data_dir
-from tdb.connectors.base import BaseConnector, ConnectorResult
+from tdb.connectors.base import BaseConnector, ConnectorResult, QueryError
 from tdb.engine.validator import strip_trailing_semicolon
 
 _ENGINES: dict[str, duckdb.DuckDBPyConnection] = {}
@@ -230,6 +230,10 @@ class CsvConnector(BaseConnector):
             # query that merely contains the word, would otherwise turn every
             # row the query produced into Python objects before being sliced.
             rows_raw = cursor.fetchmany(limit + 1)
+        except (duckdb.ProgrammingError, duckdb.DataError) as exc:
+            # Parser, binder and catalog errors, and casts that fail on a row (which
+            # surface during the fetch). File-access refusals are not among them.
+            raise QueryError(str(exc)) from exc
         finally:
             cur.close()
 

@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from tdb.audit.logger import get_logger, log_denial, log_query
 from tdb.auth.apikey import require_api_key
+from tdb.connectors.base import QueryError
 from tdb.connectors.csv import CsvConnector, SqlFileAccessError, SqlRefusedError
 from tdb.engine.validator import validate_sql
 from tdb.models import QueryRequest, QueryResponse
@@ -189,6 +190,16 @@ def run_query(
                 f"Source '{source.name}' is not accessible — its underlying "
                 "file is missing or unreadable."
             ),
+        ) from exc
+    except QueryError as exc:
+        _log.warning(
+            "query_error source_id=%s error=%s",
+            body.source_id,
+            str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Query failed: {exc}",
         ) from exc
     except Exception as exc:  # noqa: BLE001
         _log.error(
