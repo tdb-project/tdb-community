@@ -26,6 +26,7 @@ from __future__ import annotations
 import csv
 import importlib
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -607,8 +608,6 @@ class TestP16LogLinesCannotBeForged:
     def _message(
         self, caplog: pytest.LogCaptureFixture, name: str, *args: object
     ) -> str:
-        import importlib
-        import logging
 
         importlib.import_module("tdb.audit.logger")
         caplog.clear()
@@ -628,8 +627,6 @@ class TestP16LogLinesCannotBeForged:
         )
 
     def test_reloading_the_module_does_not_wrap_the_factory_again(self) -> None:
-        import importlib
-        import logging
 
         importlib.import_module("tdb.audit.logger")
         before = logging.getLogRecordFactory()
