@@ -9,6 +9,13 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **CI only — no change to the package or image.** The CI workflow's `GITHUB_TOKEN`
+  is now read-only (`permissions: contents: read`); it had the repository default.
+  CodeQL now also analyses the GitHub Actions workflows and runs the
+  `security-and-quality` query suite; both found nothing new.
+
 ## [0.12.2] — 2026-10-26
 
 > Patch: fixes how query results are encoded as JSON. REST output changes only where it
