@@ -9,6 +9,11 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.3] — 2026-10-27
+
+> Patch: TDB's application log escapes line breaks in what it logs, so a caller-supplied
+> value cannot forge a log line. No API, query or audit-log change. Also CI hardening.
+
 ### Security
 
 - **Log lines cannot be forged through caller input.** Source names, SQL fragments
