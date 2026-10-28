@@ -38,7 +38,7 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
-from tdb import __version__
+from tdb import __version__, lean
 from tdb.audit.logger import get_logger, log_denial, log_query, mcp_caller
 from tdb.config import get_api_keys
 from tdb.connectors.csv import CsvConnector, SqlFileAccessError, SqlRefusedError
@@ -65,6 +65,7 @@ _QUERY_SOURCE_SCHEMA = {
                 "Defaults to the only registered source."
             ),
         },
+        **lean.ROW_ARGUMENTS,
     },
     "required": ["sql"],
 }
@@ -96,9 +97,11 @@ _ROWS_OUTPUT_SCHEMA = {
     "properties": {
         "source": {"type": "string"},
         "columns": {"type": "array", "items": {"type": "string"}},
-        "rows": {"type": "array", "items": {"type": "object"}},
+        # Lean Mode's `table` format sends each row as an array in `columns` order.
+        "rows": {"type": "array", "items": {"type": ["object", "array"]}},
         "rows_returned": {"type": "integer"},
         "truncated": {"type": "boolean"},
+        "lean": {"type": "object"},
     },
     "required": ["source", "columns", "rows", "rows_returned", "truncated"],
 }
@@ -238,6 +241,48 @@ def _handle_tools_list(request_id: Any, _params: dict) -> dict:
 
 
 def _handle_tools_call(request_id: Any, params: dict, api_key: str = "") -> dict:
+    """
+    Run the tool, then reshape its result for Lean Mode (`tdb.lean`): after
+    the query, before the structured copy is parsed from the text, so the two
+    always carry the same payload.
+    """
+    name = str(params.get("name") or "")
+    args = params.get("arguments", {})
+    try:
+        settings = lean.for_tool(
+            name,
+            lean.resolve(
+                lean.server_default(),
+                lean.call_setting(args if isinstance(args, dict) else {}),
+            ),
+        )
+    except lean.LeanError as exc:
+        return _tool_error(request_id, str(exc))
+    if not settings:
+        return _query_source(request_id, params, api_key)
+
+    caller = mcp_caller.set({**(mcp_caller.get() or {}), "lean": settings})
+    try:
+        result = _query_source(request_id, params, api_key)
+    finally:
+        mcp_caller.reset(caller)
+    body = result.get("result")
+    if not isinstance(body, dict) or body.get("isError"):
+        return result
+    try:
+        payload = json.loads(body["content"][0]["text"])
+        body["content"][0]["text"] = lean.render(lean.apply(name, payload, settings))
+    except Exception as exc:  # noqa: BLE001
+        # A result that could not be shaped is withheld rather than sent in a
+        # form nobody checked.
+        _log.error("mcp_lean_mode_failed tool=%s error=%s", name, exc)
+        return _tool_error(
+            request_id, "Lean Mode formatting failed; the result was withheld."
+        )
+    return result
+
+
+def _query_source(request_id: Any, params: dict, api_key: str) -> dict:
     if params.get("name") != "query_source":
         return _err(request_id, -32601, f"Unknown tool: {params.get('name')}")
 
