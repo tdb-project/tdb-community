@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-10-28
+
 ### Added
 - **Lean Mode** on `query_source` — smaller results for AI agents, opt-in. A call's
   arguments win over `TDB_LEAN_MODE` (`off` | `on` | a JSON object); with nothing
