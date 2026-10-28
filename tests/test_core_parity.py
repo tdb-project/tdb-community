@@ -628,10 +628,17 @@ class TestP16LogLinesCannotBeForged:
 
     def test_reloading_the_module_does_not_wrap_the_factory_again(self) -> None:
 
-        importlib.import_module("tdb.audit.logger")
+        logger = importlib.import_module("tdb.audit.logger")
         before = logging.getLogRecordFactory()
-        importlib.reload(importlib.import_module("tdb.audit.logger"))
-        assert logging.getLogRecordFactory() is before
+        # A reload makes a new `mcp_caller`, while the routers keep the one they
+        # imported: every later MCP audit entry in this process would silently
+        # lose its caller fields. Put the original back.
+        caller = logger.mcp_caller
+        try:
+            importlib.reload(logger)
+            assert logging.getLogRecordFactory() is before
+        finally:
+            logger.mcp_caller = caller
 
     def test_other_loggers_are_left_alone(
         self, caplog: pytest.LogCaptureFixture
@@ -739,3 +746,66 @@ class TestP17CallerSqlErrorsAre400:
             assert r.status_code == 500, r.text
         finally:
             client.delete(f"/v1/sources/{reg.json().get('id', '')}", headers=HEADERS)
+
+
+_P18_LEAN_TEXT = (
+    '{"source":"p18","columns":["id","note"],'
+    '"rows":[[1,"' + "x" * 50 + '…[+70 chars]"],[2,null]],'
+    '"rows_returned":2,"truncated":false,'
+    '"lean":{"format":"table","max_cell_chars":50,"trimmed_cells":1}}'
+)
+
+
+class TestP18LeanModeIsTheSameInBothEditions:
+    """
+    P18 — Lean Mode (Wave 6): the same MCP call yields the same bytes in both
+    editions, and a call that sets nothing is unchanged. The expected text is a
+    literal, so each edition is checked on its own rather than against the other.
+    (Row 2's `""` is NULL: DuckDB reads a quoted empty CSV field as NULL.)
+    """
+
+    def _call(self, tmp_path: Path, args: dict) -> str:
+        p = tmp_path / "p18.csv"
+        p.write_text("id,note\n1," + "x" * 120 + '\n2,""\n')
+        reg = client.post(
+            "/v1/sources",
+            headers=HEADERS,
+            json={
+                "name": "p18",
+                "source_type": "csv",
+                "connection": {"file_path": str(p)},
+            },
+        )
+        assert reg.status_code == 201, reg.text
+        try:
+            r = client.post(
+                "/v1/mcp",
+                headers={**HEADERS, "MCP-Protocol-Version": "2025-06-18"},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "query_source",
+                        "arguments": {"sql": "SELECT * FROM data ORDER BY id", **args},
+                    },
+                },
+            )
+            result = r.json()["result"]
+            assert result["structuredContent"] == json.loads(
+                result["content"][0]["text"]
+            )
+            return result["content"][0]["text"]
+        finally:
+            client.delete(f"/v1/sources/{reg.json()['id']}", headers=HEADERS)
+
+    def test_lean_output_is_byte_for_byte(self, tmp_path: Path) -> None:
+        text = self._call(tmp_path, {"lean": True, "max_cell_chars": 50})
+        assert text == _P18_LEAN_TEXT
+
+    def test_nothing_set_is_unchanged(self, tmp_path: Path) -> None:
+        text = self._call(tmp_path, {})
+        assert '"lean"' not in text
+        assert text.startswith(
+            '{"source": "p18", "columns": ["id", "note"], "rows": [{'
+        )

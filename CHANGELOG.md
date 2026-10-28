@@ -9,6 +9,16 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Lean Mode** on `query_source` — smaller results for AI agents, opt-in. A call's
+  arguments win over `TDB_LEAN_MODE` (`off` | `on` | a JSON object); with nothing
+  set, every response is unchanged.
+  - `lean: true`: rows as arrays in `columns` order (lossless). `format: objects |
+    table` sets the shape explicitly.
+  - `max_cell_chars` (minimum 50; `0` = off): longer text cells are cut and each cut
+    is marked `…[+N chars]`. Lossy, so never part of `lean: true`.
+  - A `lean` field reports what was applied; the audit `query` entry records it.
+
 ## [0.12.4] — 2026-10-27
 
 > Patch: a mistake in the caller's SQL (unknown column or table, a value that does not
