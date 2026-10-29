@@ -49,3 +49,22 @@ jobs:
         # No env vars needed — tests/conftest.py sets TDB_API_KEYS,
         # TDB_REGISTRY_DB, and TDB_LOG_FILE before any tdb.* import.
         run: uv run pytest
+
+  chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Lint and render the Helm chart
+        run: |
+          H="docker run --rm -v $PWD/charts:/charts -w /charts alpine/helm:3.16.2"
+          $H lint tdb-community --set apiKey.value=ci
+          $H template t tdb-community --set apiKey.value=ci > /dev/null
+          # The chart must refuse to render without a key rather than fall back to the public default.
+          if $H template t tdb-community > /dev/null 2>&1; then echo "chart rendered without an API key"; exit 1; fi
+
+      - name: Chart appVersion matches the release
+        run: |
+          v=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/tdb/__init__.py)
+          grep -qx "appVersion: \"$v\"" charts/tdb-community/Chart.yaml \
+            || { echo "charts/tdb-community/Chart.yaml appVersion is not $v"; exit 1; }

@@ -224,6 +224,13 @@ log pipeline — e.g. `docker exec tdb cat /app/tdb_audit.jsonl | jq 'select(.ro
 To review refused attempts specifically:
 `docker exec tdb cat /app/tdb_audit.jsonl | jq 'select(.event == "denied")'`.
 
+### Kubernetes
+
+A Helm chart is in [`charts/tdb-community`](charts/tdb-community): one pod, a persistent
+volume for the registry and audit log, your CSVs mounted read-only, non-root with a
+read-only root filesystem. See its [README](charts/tdb-community/README.md) or the
+[Kubernetes guide](https://docs.tdb.jiracorp.co.in/deployment/kubernetes/).
+
 ### Stopping TDB
 
 When you're done, stop the container from the same terminal:

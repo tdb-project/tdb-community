@@ -1,0 +1,13 @@
+TDB community {{ .Values.image.tag | default .Chart.AppVersion }} is starting (one replica, by design).
+
+Reach it from your machine:
+  kubectl port-forward svc/{{ include "tdb.fullname" . }} 8000:{{ .Values.service.port }}
+  curl http://localhost:8000/health
+
+Register a CSV from the data volume (file_path must be under /data):
+  curl -X POST http://localhost:8000/v1/sources -H "Authorization: Bearer <your key>" \
+    -H "Content-Type: application/json" \
+    -d '{"name":"mydata","source_type":"csv","connection":{"file_path":"/data/mydata.csv"}}'
+
+MCP endpoint for AI tools: http://<host>/v1/mcp
+Docs: https://docs.tdb.jiracorp.co.in/

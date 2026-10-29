@@ -1,0 +1,55 @@
+image:
+  repository: ghcr.io/tdb-project/tdb-community
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# The API key clients send as "Authorization: Bearer <key>".
+# Set exactly one: an existing Secret (recommended) or a value the chart stores in a Secret.
+apiKey:
+  existingSecret: ""
+  existingSecretKey: api-key
+  value: ""
+
+# Registry (SQLite) and audit log. One ReadWriteOnce volume, so TDB runs as one replica.
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClass: ""
+  existingClaim: ""
+
+# CSV files, mounted read-only at /data. Register sources with file_path: /data/<file>.csv
+data:
+  existingClaim: ""
+
+logLevel: INFO
+
+# Any other TDB_* variable, e.g. TDB_LEAN_MODE.
+extraEnv: []
+#  - name: TDB_LEAN_MODE
+#    value: "on"
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: tdb.example.com
+  tls: []
+#    - secretName: tdb-tls
+#      hosts: [tdb.example.com]
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}
