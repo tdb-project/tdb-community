@@ -15,7 +15,9 @@ TDB is a self-hosted middleware that sits in front of your data and exposes it t
 standard REST and MCP API. You register a data source once; TDB gives it a clean SQL
 interface, auto-detects the schema, enforces read-only access, and logs every query to
 an audit file. AI tools like Claude and Cursor connect to the MCP endpoint directly —
-no custom integration required.
+no custom integration required. And it is lean by design: results are sized for an
+agent's context window, so the agent's tokens go on your answer
+([Saving tokens](#saving-tokens-lean-mode)).
 
 **Community edition:** one CSV file, one API key, unlimited queries, full audit log.
 [Enterprise edition](https://docs.tdb.jiracorp.co.in/pricing/) adds PostgreSQL, multi-source, OAuth 2.1, RBAC, and SOC 2-ready audit export.
@@ -173,7 +175,8 @@ TDB exposes a standard [MCP](https://modelcontextprotocol.io) endpoint at `/v1/m
 Community Edition ships one tool, `query_source`. In VS Code, the free
 [TDB extension](https://marketplace.visualstudio.com/items?itemName=tdb-project.tdb-vscode)
 connects in one command. See [Connecting an MCP Client](#connecting-an-mcp-client) below
-for Claude Code, Claude Desktop, Cursor, VS Code and other clients.
+for Claude Code, Claude Desktop, Cursor, VS Code and other clients. To make results
+smaller for the agent, see [Saving tokens](#saving-tokens-lean-mode).
 
 ### Step 5 — Check the audit log
 
@@ -307,6 +310,27 @@ one endpoint, so older and current clients both connect unchanged. See the
 [MCP reference](https://docs.tdb.jiracorp.co.in/api/mcp/#protocol-versions) for
 what each version adds.
 
+### Saving tokens (Lean Mode)
+
+Every result an agent reads is paid for in its context window. From 0.13.0,
+`query_source` takes two opt-in arguments:
+
+- `lean: true` sends rows as arrays in `columns` order instead of objects that repeat
+  every column name. Lossless. Measured with Claude Code: a 100-row result went from
+  10,412 to 6,868 tokens, with the same answers on a 21-question check.
+- `max_cell_chars: N` cuts text longer than N characters (minimum 50) and marks each
+  cut `…[+N chars]`, so the agent knows to fetch that value on its own if it needs it.
+  Lossy, so never switched on by `lean: true`.
+
+Ask for it in the prompt (*"use lean: true"*), or turn it on for every call with
+`-e TDB_LEAN_MODE=on` on `docker run`. A call's own arguments win, and `lean: false`
+always gets the default format back. With nothing set, nothing changes. The clients
+below have no Lean setting of their own: it is set here, on the server. Details in the
+[MCP reference](https://docs.tdb.jiracorp.co.in/api/mcp/#saving-tokens-lean-mode).
+
+Push work into the SQL as well: `GROUP BY` and `WHERE` run in the database, so the
+agent reads the answer rather than the rows behind it.
+
 ---
 
 ### VS Code (Copilot / MCP extension)
@@ -314,7 +338,9 @@ what each version adds.
 **Easiest:** install the free [TDB extension](https://marketplace.visualstudio.com/items?itemName=tdb-project.tdb-vscode)
 (also on [Open VSX](https://open-vsx.org/extension/tdb-project/tdb-vscode)), run
 **TDB: Connect to Server**, and enter `http://localhost:8000` and your key. The key is
-kept in VS Code's secret storage. To configure it by hand instead:
+kept in VS Code's secret storage. Use a local **Agent** chat: Copilot CLI sessions
+don't receive the extension's key (VS Code does not pass secrets to them), so TDB
+refuses their calls with `missing_api_key`. To configure it by hand instead:
 
 Open or create `%APPDATA%\Code\User\mcp.json` (Windows) or `~/.config/Code/User/mcp.json` (Mac/Linux):
 
