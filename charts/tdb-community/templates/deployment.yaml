@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tdb.fullname" . }}
+  labels:
+    {{- include "tdb.labels" . | nindent 4 }}
+spec:
+  # One replica by design: the registry (SQLite) and the audit log are files on one
+  # ReadWriteOnce volume, and two writers would corrupt both.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "tdb.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tdb.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: tdb
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: TDB_API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tdb.secretName" . }}
+                  key: {{ include "tdb.secretKey" . }}
+            - name: TDB_REGISTRY_DB
+              value: /app/data/tdb_registry.db
+            - name: TDB_LOG_FILE
+              value: /app/logs/tdb_audit.jsonl
+            - name: TDB_LOG_LEVEL
+              value: {{ .Values.logLevel | quote }}
+            - name: TDB_ALLOWED_DATA_DIR
+              value: /data
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: state
+              mountPath: /app/data
+              subPath: data
+            - name: state
+              mountPath: /app/logs
+              subPath: logs
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.data.existingClaim }}
+            - name: csv
+              mountPath: /data
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: state
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-state" (include "tdb.fullname" .)) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.data.existingClaim }}
+        - name: csv
+          persistentVolumeClaim:
+            claimName: {{ .Values.data.existingClaim }}
+            readOnly: true
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
