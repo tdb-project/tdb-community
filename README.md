@@ -594,9 +594,9 @@ of `SELECT *`).
 
 | | Community (this repo) | Enterprise |
 |---|---|---|
-| Data sources | One CSV source | CSV, PostgreSQL, MySQL, SQL Server, Snowflake; unlimited sources |
-| Auth | Single static API key | Key rotation and management, JWT, OAuth 2.1 with PKCE, per-key rate limits |
-| Access control | — | RBAC (read / readwrite / admin), MCP tool allow-lists per key |
+| Data sources | One CSV source | CSV, Parquet, DuckDB, PostgreSQL, MySQL, SQL Server, Snowflake; unlimited sources |
+| Auth | Single static API key | Key rotation and management, JWT, OAuth 2.1 with PKCE, per-key rate limits; single sign-on (OIDC) and SCIM on Mid-Market |
+| Access control | — | RBAC (read / readwrite / admin), MCP tool allow-lists per key; column and row policies on Mid-Market |
 | MCP | `query_source` | Seven tools, prompt-injection filtering, schema annotations |
 | SQL clients and BI tools | — | PostgreSQL wire gateway: Metabase, DBeaver, `psql` connect unchanged |
 | Named views | — | YAML views with typed parameters |
@@ -604,8 +604,7 @@ of `SELECT *`).
 | Audit log | Local NDJSON | Hash-chained and verifiable, sealed-segment retention, Splunk and S3 export |
 | Observability | Health check | Prometheus metrics, schema caching |
 
-The commercial edition's Mid-Market tier adds column and row policies, and single sign-on
-(OIDC) with SCIM. SAML is built on request.
+SAML is built on request.
 
 See the [full edition comparison](https://docs.tdb.jiracorp.co.in/pricing/) — email <hello@tdb.jiracorp.co.in> for pricing and a free 30-day evaluation.
 
