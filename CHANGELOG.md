@@ -23,8 +23,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **What it costs:** an investigation can see what ran, but not with which values.
 
 ### Changed
-- **New audit log files are created with mode 0640**, not world-readable. Existing files keep theirs.
-  A log shipper running as another user and outside the group needs access granted.
+- **New audit log files are created with mode 0600**, readable only by the user TDB runs as. Existing
+  files keep theirs. A log shipper running as another user needs access granted to a new file.
 
 ## [0.15.0] — 2026-11-04
 

@@ -77,8 +77,8 @@ def get_logger(name: str) -> logging.Logger:
 def _append(entry: dict) -> None:
     if get_audit_sql_mode() == "redacted":
         entry = redact_fields(entry)
-    # 0640 when it creates the file: entries can hold what callers typed.
-    descriptor = os.open(get_log_file(), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o640)
+    # 0600 when it creates the file: entries can hold what callers typed.
+    descriptor = os.open(get_log_file(), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     with os.fdopen(descriptor, "a") as f:
         f.write(json.dumps(entry) + "\n")
 

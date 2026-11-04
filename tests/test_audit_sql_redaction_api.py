@@ -101,7 +101,7 @@ def test_the_caller_still_gets_the_real_result(client, monkeypatch):
 
 def test_a_new_audit_file_is_not_world_readable(client):
     _query(client, _QUERY)
-    assert stat.S_IMODE(Path(get_log_file()).stat().st_mode) == 0o640
+    assert stat.S_IMODE(Path(get_log_file()).stat().st_mode) == 0o600
 
 
 def test_a_mistyped_mode_stops_startup(monkeypatch):
