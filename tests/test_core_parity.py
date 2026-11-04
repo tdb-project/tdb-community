@@ -917,3 +917,28 @@ class TestP21RedactedSqlIsTheSameInBothEditions:
         from tdb.audit.redact import redact_sql
 
         assert redact_sql(sql) == expected
+
+
+class TestP22AFailedQueryIsAuditedInBothEditions:
+    """The shared causes map to one reason, so a SIEM rule works on either edition."""
+
+    @pytest.mark.parametrize(
+        "make,reason",
+        [
+            (lambda: _base().QueryError("x"), "query_failed"),
+            (lambda: FileNotFoundError("x"), "source_unavailable"),
+            (lambda: PermissionError("x"), "path_outside_allowed_dir"),
+            (lambda: ValueError("x"), "invalid_arguments"),
+            (lambda: RuntimeError("x"), "internal_error"),
+        ],
+    )
+    def test_the_reason(self, make, reason) -> None:
+        from tdb.connectors.failures import failure_reason
+
+        assert failure_reason(make()) == reason
+
+
+def _base():
+    from tdb.connectors import base
+
+    return base

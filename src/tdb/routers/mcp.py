@@ -42,6 +42,7 @@ from tdb import __version__, lean
 from tdb.audit.logger import get_logger, log_denial, log_query, mcp_caller
 from tdb.config import get_api_keys
 from tdb.connectors.csv import CsvConnector, SqlFileAccessError, SqlRefusedError
+from tdb.connectors.failures import failure_reason
 from tdb.engine.validator import validate_sql
 from tdb.registry import store
 
@@ -352,6 +353,13 @@ def _query_source(request_id: Any, params: dict, api_key: str) -> dict:
         return _tool_error(request_id, str(exc))
     except Exception as exc:
         _log.error("mcp_query_error — %s", str(exc))
+        log_denial(
+            action="mcp_query",
+            reason=failure_reason(exc),
+            source_id=source.id,
+            sql=sql,
+            key_hint=key_hint,
+        )
         return _tool_error(request_id, f"Query execution error: {exc}")
 
     _log.info(
