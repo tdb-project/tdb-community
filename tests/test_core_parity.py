@@ -34,7 +34,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from tdb.connectors.csv import CsvConnector
+from tdb.connectors.csv import CsvConnector, SqlFileAccessError, close_engine
 from tdb.engine.validator import validate_sql
 from tdb.main import app
 
@@ -852,17 +852,15 @@ class TestP20SqlReadsOnlyTheRegisteredFile:
 
     @staticmethod
     def _connector(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-        import tdb.connectors.csv as csv_mod
-
         monkeypatch.setenv("TDB_ALLOWED_DATA_DIR", str(tmp_path))
-        csv_mod.close_engine()
+        close_engine()
         (tmp_path / "sub").mkdir()
         (tmp_path / "orders.csv").write_text("id,v\n1,a\n")
         (tmp_path / "payroll.csv").write_text("name,ssn\nP20-SECRET,123\n")
         (tmp_path / "notes.txt").write_text("P20-SECRET\n")
         (tmp_path / "sub" / "deep.csv").write_text("k\nP20-SECRET\n")
         (tmp_path / "link.csv").symlink_to(tmp_path / "payroll.csv")
-        return csv_mod, csv_mod.CsvConnector(
+        return CsvConnector(
             connection={"file_path": str(tmp_path / "orders.csv")}
         )
 
@@ -885,14 +883,14 @@ class TestP20SqlReadsOnlyTheRegisteredFile:
     def test_nothing_beside_the_file_is_readable(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, template: str
     ) -> None:
-        csv_mod, connector = self._connector(tmp_path, monkeypatch)
-        with pytest.raises(csv_mod.SqlFileAccessError):
+        connector = self._connector(tmp_path, monkeypatch)
+        with pytest.raises(SqlFileAccessError):
             connector.execute(template.format(d=tmp_path), limit=10)
 
     def test_its_own_file_still_reads_both_ways(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _, connector = self._connector(tmp_path, monkeypatch)
+        connector = self._connector(tmp_path, monkeypatch)
         expected = [{"id": 1, "v": "a"}]
         assert connector.execute("SELECT * FROM data", limit=10).rows == expected
         by_path = f"SELECT * FROM read_csv('{tmp_path}/orders.csv')"
