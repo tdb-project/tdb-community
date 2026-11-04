@@ -9,6 +9,20 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-11-04
+
+> **Security: SQL reads only the registered file.** SQL on a CSV source could read any other
+> file in the data directory: `read_csv` and `read_text` returned contents, and `glob` listed
+> them. Found by an independent review. Nothing outside the directory was reachable.
+
+### Security
+- **The DuckDB engine now allows only the registered file**, not the directory. Other files are
+  refused with 403 and audited as `sql_file_access`, on REST and MCP.
+
+### Upgrade
+- **SQL that read another file with `read_csv` and similar now returns 403.** It was never
+  documented as a feature, and it also got around the one-source limit.
+
 ## [0.14.0] — 2026-11-04
 
 > **Security: no built-in API key.** With `TDB_API_KEYS` unset, TDB used to fall back to a

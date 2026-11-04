@@ -27,6 +27,8 @@ import csv
 import importlib
 import json
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -246,13 +248,13 @@ class TestP8CtesAreAcceptedAndStillReadOnly:
 
 class TestP9SqlCannotReachFilesBeyondTheSource:
     """
-    P9 — SQL reaches the registered CSV and its data directory, nothing else.
+    P9 — SQL reaches the registered file, nothing else.
 
     `TDB_ALLOWED_DATA_DIR` only ever checked the *registered* path. DuckDB
     resolves file paths written inside the SQL too (`read_csv`, `read_text`,
     `COPY … TO`), so a plain SELECT on any registered source could read any file
-    the process could, confinement set or not. The engine now refuses file
-    access outside the data directory and locks its configuration, and the
+    the process could, confinement set or not. The engine now refuses every
+    file but the registered one and locks its configuration, and the
     validator refuses a second statement — the only route to a write, since a
     single SELECT or WITH cannot write a file.
     """
@@ -294,16 +296,19 @@ class TestP9SqlCannotReachFilesBeyondTheSource:
         # Driven at the engine, not the connector: the connector now refuses a
         # second statement before it runs, and the lock has to hold even if
         # something ever reaches the engine past that check.
-        from tdb.connectors.csv import _data_root, _engine, close_engine
+        from tdb.connectors.csv import _engine, close_engine
 
         ok, _ = self._layout(tmp_path)
         close_engine()
-        cur = _engine(_data_root(str(ok))).cursor()
-        try:
-            with pytest.raises(Exception, match="(?i)configuration"):
-                cur.execute("SET enable_external_access = true")
-        finally:
-            cur.close()
+        with _engine(str(ok)) as engine:
+            cur = engine.cursor()
+            try:
+                with pytest.raises(Exception, match="(?i)configuration"):
+                    cur.execute("SET enable_external_access = true")
+                with pytest.raises(Exception, match="(?i)configuration"):
+                    cur.execute("SET allowed_paths = ['/']")
+            finally:
+                cur.close()
 
     @pytest.mark.parametrize(
         "sql",
@@ -695,6 +700,11 @@ class TestP17CallerSqlErrorsAre400:
         base = importlib.import_module("tdb.connectors.base")
         real_engine = csv_mod._engine
 
+        @contextmanager
+        def faulty_engine(path: str) -> Iterator[FaultyEngine]:
+            with real_engine(path) as engine:
+                yield FaultyEngine(engine)
+
         class FaultyCursor:
             def __init__(self, cur: duckdb.DuckDBPyConnection) -> None:
                 self._cur = cur
@@ -706,13 +716,13 @@ class TestP17CallerSqlErrorsAre400:
                 raise getattr(duckdb, fault)("engine fault")
 
         class FaultyEngine:
-            def __init__(self, root: str) -> None:
-                self._engine = real_engine(root)
+            def __init__(self, engine: duckdb.DuckDBPyConnection) -> None:
+                self._engine = engine
 
             def cursor(self) -> FaultyCursor:
                 return FaultyCursor(self._engine.cursor())
 
-        monkeypatch.setattr(csv_mod, "_engine", FaultyEngine)
+        monkeypatch.setattr(csv_mod, "_engine", faulty_engine)
         c = csv_mod.CsvConnector(connection={"file_path": _csv(tmp_path, 1)})
         with pytest.raises(getattr(duckdb, fault)) as caught:
             c.execute("SELECT * FROM data", limit=1)
@@ -830,3 +840,60 @@ class TestP19NoPublicApiKey:
             check_api_keys(other_login=True)
         response = client.get("/v1/sources", headers={"Authorization": f"Bearer {key}"})
         assert response.status_code == 401
+
+
+class TestP20SqlReadsOnlyTheRegisteredFile:
+    """
+    P20 — A source's SQL reads its own file and no other, including others in the same
+    data directory. Confinement to the directory let one source read everything mounted
+    beside it (found by an independent review). The engine holds the rule, not a list of
+    file functions, which could never be complete.
+    """
+
+    @staticmethod
+    def _connector(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        import tdb.connectors.csv as csv_mod
+
+        monkeypatch.setenv("TDB_ALLOWED_DATA_DIR", str(tmp_path))
+        csv_mod.close_engine()
+        (tmp_path / "sub").mkdir()
+        (tmp_path / "orders.csv").write_text("id,v\n1,a\n")
+        (tmp_path / "payroll.csv").write_text("name,ssn\nP20-SECRET,123\n")
+        (tmp_path / "notes.txt").write_text("P20-SECRET\n")
+        (tmp_path / "sub" / "deep.csv").write_text("k\nP20-SECRET\n")
+        (tmp_path / "link.csv").symlink_to(tmp_path / "payroll.csv")
+        return csv_mod, csv_mod.CsvConnector(
+            connection={"file_path": str(tmp_path / "orders.csv")}
+        )
+
+    @pytest.mark.parametrize(
+        "template",
+        [
+            "SELECT * FROM read_csv('{d}/payroll.csv')",
+            "SELECT * FROM '{d}/payroll.csv'",
+            "SELECT content FROM read_text('{d}/notes.txt')",
+            "SELECT content FROM read_blob('{d}/notes.txt')",
+            "SELECT * FROM read_csv('{d}/sub/deep.csv')",
+            "SELECT * FROM read_csv('{d}/sub/../payroll.csv')",
+            "SELECT * FROM read_csv('{d}/link.csv')",
+            "SELECT * FROM read_csv('{d}/*.csv')",
+            "SELECT * FROM read_csv(['{d}/orders.csv', '{d}/payroll.csv'])",
+            "SELECT * FROM glob('{d}/*')",
+            "SELECT * FROM sniff_csv('{d}/payroll.csv')",
+        ],
+    )
+    def test_nothing_beside_the_file_is_readable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, template: str
+    ) -> None:
+        csv_mod, connector = self._connector(tmp_path, monkeypatch)
+        with pytest.raises(csv_mod.SqlFileAccessError):
+            connector.execute(template.format(d=tmp_path), limit=10)
+
+    def test_its_own_file_still_reads_both_ways(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _, connector = self._connector(tmp_path, monkeypatch)
+        expected = [{"id": 1, "v": "a"}]
+        assert connector.execute("SELECT * FROM data", limit=10).rows == expected
+        by_path = f"SELECT * FROM read_csv('{tmp_path}/orders.csv')"
+        assert connector.execute(by_path, limit=10).rows == expected

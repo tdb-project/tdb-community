@@ -1,9 +1,9 @@
 """
-The shared DuckDB engine behind the CSV connector.
+The DuckDB engine kept open for each file behind the CSV connector.
 
-The point of the change is performance, but the properties worth protecting are
-correctness ones: sharing an engine across queries must not let sources see each
-other's data, and must not start caching the file's contents.
+The point of keeping one is performance, but the properties worth protecting are
+correctness ones: it must read only its own file, must stay within its cap without
+closing an engine in use, and must not start caching the file's contents.
 """
 
 from __future__ import annotations
@@ -40,14 +40,82 @@ class TestEngineLifecycle:
         assert len(first) == 1
         assert csv_mod._ENGINES == first
 
-    def test_one_engine_serves_different_sources(self, tmp_path: Path) -> None:
-        """No per-source cache — so nothing grows with the number of sources."""
+    def test_each_file_gets_its_own_engine(self, tmp_path: Path) -> None:
         a = _write(tmp_path / "a.csv", "id,v\n1,x\n")
         b = _write(tmp_path / "b.csv", "id,v\n1,y\n2,z\n")
         CsvConnector({"file_path": str(a)}).execute("SELECT * FROM data", limit=10)
-        engines_after_a = dict(csv_mod._ENGINES)
         CsvConnector({"file_path": str(b)}).execute("SELECT * FROM data", limit=10)
-        assert csv_mod._ENGINES == engines_after_a
+        assert set(csv_mod._ENGINES) == {str(a.resolve()), str(b.resolve())}
+
+    def test_a_symlink_shares_the_engine_of_its_target(self, tmp_path: Path) -> None:
+        a = _write(tmp_path / "a.csv", "id,v\n1,x\n")
+        link = tmp_path / "link.csv"
+        link.symlink_to(a)
+        for path in (a, link):
+            result = CsvConnector({"file_path": str(path)}).execute(
+                "SELECT * FROM data", limit=10
+            )
+            assert result.rows == [{"id": 1, "v": "x"}]
+        assert set(csv_mod._ENGINES) == {str(a.resolve())}
+
+    def test_a_path_through_a_symlinked_directory_works(self, tmp_path: Path) -> None:
+        real = tmp_path / "real"
+        real.mkdir()
+        _write(real / "a.csv", "id,v\n1,x\n")
+        (tmp_path / "linked").symlink_to(real)
+        result = CsvConnector(
+            {"file_path": str(tmp_path / "linked" / "a.csv")}
+        ).execute("SELECT * FROM data", limit=10)
+        assert result.rows == [{"id": 1, "v": "x"}]
+
+    def test_idle_engines_stop_at_the_cap_oldest_first(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(csv_mod, "_MAX_ENGINES", 2)
+        paths = [_write(tmp_path / f"{n}.csv", "id\n1\n") for n in "abc"]
+        for path in paths:
+            CsvConnector({"file_path": str(path)}).execute(
+                "SELECT * FROM data", limit=1
+            )
+        assert list(csv_mod._ENGINES) == [str(p.resolve()) for p in paths[1:]]
+
+    def test_using_an_engine_keeps_it_from_being_the_oldest(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(csv_mod, "_MAX_ENGINES", 2)
+        a, b, c = (
+            CsvConnector({"file_path": str(_write(tmp_path / f"{n}.csv", "id\n1\n"))})
+            for n in "abc"
+        )
+        for conn in (a, b, a, c):
+            conn.execute("SELECT * FROM data", limit=1)
+        assert str((tmp_path / "a.csv").resolve()) in csv_mod._ENGINES
+        assert str((tmp_path / "b.csv").resolve()) not in csv_mod._ENGINES
+
+    def test_an_engine_in_use_is_not_closed_past_the_cap(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(csv_mod, "_MAX_ENGINES", 1)
+        a = _write(tmp_path / "a.csv", "id\n1\n")
+        b = _write(tmp_path / "b.csv", "id\n1\n")
+        with csv_mod._engine(str(a)) as engine:
+            CsvConnector({"file_path": str(b)}).execute("SELECT * FROM data", limit=1)
+            assert engine.execute("SELECT 1").fetchone() == (1,)
+            assert str(a.resolve()) in csv_mod._ENGINES
+        assert list(csv_mod._ENGINES) == [str(a.resolve())]
+
+    def test_a_reopened_engine_is_still_locked_to_its_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(csv_mod, "_MAX_ENGINES", 1)
+        a = _write(tmp_path / "a.csv", "id\n1\n")
+        b = _write(tmp_path / "b.csv", "id\n1\n")
+        ca = CsvConnector({"file_path": str(a)})
+        ca.execute("SELECT * FROM data", limit=1)
+        CsvConnector({"file_path": str(b)}).execute("SELECT * FROM data", limit=1)
+        ca.execute("SELECT * FROM data", limit=1)
+        with pytest.raises(csv_mod.SqlFileAccessError):
+            ca.execute(f"SELECT * FROM read_csv('{b}')", limit=1)
 
     def test_close_engine_is_idempotent(self) -> None:
         csv_mod.close_engine()
@@ -111,7 +179,7 @@ class TestSourcesAreIsolated:
 
 class TestTheFileIsNotCached:
     """
-    A shared engine must not become a shared *cache*. Materialising the CSV
+    A kept-open engine must not become a *cache*. Materialising the CSV
     would be faster still and is deliberately not done — see `_engine`.
     """
 
