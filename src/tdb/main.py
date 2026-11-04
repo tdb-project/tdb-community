@@ -5,8 +5,8 @@ Start the server:
     uvicorn tdb.main:app --reload --port 8000
 
 Environment variables:
-    TDB_API_KEYS    Comma-separated list of valid API keys
-                    Default (dev only): dev-insecure-key-change-me
+    TDB_API_KEYS    Comma-separated list of valid API keys. Required: TDB will not
+                    start without one, or with an example value
     TDB_LOG_FILE    Path for the JSON audit log  (default: tdb_audit.jsonl)
     TDB_LOG_LEVEL   Logging level  (default: INFO)
 """
@@ -22,7 +22,7 @@ from fastapi.responses import JSONResponse
 
 from tdb import __version__
 from tdb.audit.logger import get_logger
-from tdb.config import get_log_level
+from tdb.config import InsecureApiKeyError, check_api_keys, get_log_level
 from tdb.connectors.csv import close_engine as close_csv_engine
 from tdb.registry.migrations import run_migrations
 from tdb.routers.mcp import router as mcp_router
@@ -40,17 +40,15 @@ _log = get_logger("tdb.main")
 async def lifespan(app: FastAPI):
     """Run setup tasks on startup; yield to serve requests; clean up on shutdown."""
     logging.root.setLevel(getattr(logging, get_log_level()))
+    try:
+        check_api_keys()
+    except InsecureApiKeyError as exc:
+        _log.error("api_key_refused")
+        print(f"\n⛔  {exc}\n")
+        raise
     os.makedirs("data", exist_ok=True)
     run_migrations()
-    dev_mode = "dev-insecure-key-change-me" in os.environ.get(
-        "TDB_API_KEYS", "dev-insecure-key-change-me"
-    )
-    _log.info("tdb_startup version=%s dev_mode=%s", __version__, dev_mode)
-    if dev_mode:
-        print(
-            "\n⚠️  WARNING: TDB is running with the default insecure dev API key.\n"
-            "   Set  TDB_API_KEYS=your-secret-key  before exposing to a network.\n"
-        )
+    _log.info("tdb_startup version=%s", __version__)
     yield
     # Shutdown: release the shared DuckDB engine the CSV connector runs on.
     close_csv_engine()

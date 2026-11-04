@@ -9,6 +9,24 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-11-04
+
+> **Security: no built-in API key.** With `TDB_API_KEYS` unset, TDB used to fall back to a
+> key published in its own source, and the Compose file published the port on every
+> interface. Anyone who could reach it could query. Found by an independent review.
+
+### Security
+- **TDB refuses to start** with `TDB_API_KEYS` unset or empty, or holding an example value
+  from TDB's own files and docs, and those values are never accepted as credentials.
+- **Compose refuses to start** without `TDB_API_KEYS`. `.env.example` no longer holds a value.
+
+### Upgrade
+- **If you relied on the default key, TDB will not start until you set a real one.** Set the
+  new key in every client that used the old one.
+
+### Changed
+- The `tdb_startup` log line no longer carries `dev_mode`.
+
 ## [0.13.0] — 2026-10-28
 
 ### Added

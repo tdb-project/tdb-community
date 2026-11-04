@@ -809,3 +809,24 @@ class TestP18LeanModeIsTheSameInBothEditions:
         assert text.startswith(
             '{"source": "p18", "columns": ["id", "note"], "rows": [{'
         )
+
+
+class TestP19NoPublicApiKey:
+    """
+    P19 — An example key is refused at startup and is never a credential. Enterprise may
+    start with no static key when another login exists, so this holds the common line.
+    """
+
+    @pytest.mark.parametrize(
+        "key", ["dev-insecure-key-change-me", "CHANGE-ME-IN-PRODUCTION"]
+    )
+    def test_example_keys_are_refused(self, monkeypatch, key):
+        from tdb.config import InsecureApiKeyError, check_api_keys
+
+        monkeypatch.setenv("TDB_API_KEYS", key)
+        with pytest.raises(InsecureApiKeyError):
+            check_api_keys()
+        with pytest.raises(InsecureApiKeyError):
+            check_api_keys(other_login=True)
+        response = client.get("/v1/sources", headers={"Authorization": f"Bearer {key}"})
+        assert response.status_code == 401

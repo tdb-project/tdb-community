@@ -298,13 +298,13 @@ curl http://localhost:8000/health
 # Register a source (CSV must be in ./data/ which is mounted read-only)
 cp /tmp/sales.csv ./data/sales.csv
 curl -X POST http://localhost:8000/v1/sources \
-  -H "Authorization: Bearer dev-insecure-key-change-me" \
+  -H "Authorization: Bearer $TDB_API_KEYS" \
   -H "Content-Type: application/json" \
   -d '{"name":"sales","source_type":"csv","connection":{"file_path":"/data/sales.csv"}}'
 
 # Restart and verify persistence
 docker compose restart
-curl http://localhost:8000/v1/sources -H "Authorization: Bearer dev-insecure-key-change-me"
+curl http://localhost:8000/v1/sources -H "Authorization: Bearer $TDB_API_KEYS"
 ```
 
 | # | Check | Expected |
