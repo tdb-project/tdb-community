@@ -9,6 +9,14 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.17.1] — 2026-11-04
+
+### Fixed
+- **The application log's INFO lines now reach the console.** The root logger had no handler under
+  uvicorn, so `tdb_startup`, `query_executed` and the rest were dropped, only warnings and above got
+  through, and `TDB_LOG_LEVEL=DEBUG` did nothing. `TDB_LOG_LEVEL` now works, with `INFO` as documented.
+  Expect more lines in `docker logs`; they hold IDs and counts, not SQL or keys.
+
 ## [0.17.0] — 2026-11-04
 
 > **A query that fails is now in the audit log.** One the engine rejected (a mistyped column, say) or
