@@ -9,6 +9,18 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-11-04
+
+> **A query that fails is now in the audit log.** One the engine rejected (a mistyped column, say) or
+> that hit a missing file or an unexpected error answered the caller and reached only the application
+> log, though TDB promises every query is logged. Found while checking 0.16.0.
+
+### Changed
+- **New `event: "denied"` entries with reason `query_failed`, `source_unavailable` or
+  `internal_error`**, signed into the chain like every other denial, on REST and the MCP `query_source` tool. The error text stays out
+  of the entry, because it can quote data. Responses are unchanged. **Expect more entries**, since
+  agents often send a query that fails: a SIEM rule alerting on `denied` should filter on `reason`.
+
 ## [0.16.0] — 2026-11-04
 
 > **`TDB_AUDIT_SQL=redacted` keeps statement values out of TDB's logs.** SQL can hold customer data

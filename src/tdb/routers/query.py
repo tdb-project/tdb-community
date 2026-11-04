@@ -184,6 +184,13 @@ def run_query(
             body.source_id,
             str(exc),
         )
+        log_denial(
+            action="query",
+            reason="source_unavailable",
+            source_id=source.id,
+            sql=body.sql,
+            key_hint=key_hint,
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
@@ -197,6 +204,13 @@ def run_query(
             body.source_id,
             str(exc),
         )
+        log_denial(
+            action="query",
+            reason="query_failed",
+            source_id=source.id,
+            sql=body.sql,
+            key_hint=key_hint,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Query failed: {exc}",
@@ -206,6 +220,13 @@ def run_query(
             "query_execution_error source_id=%s error=%s",
             body.source_id,
             str(exc),
+        )
+        log_denial(
+            action="query",
+            reason="internal_error",
+            source_id=source.id,
+            sql=body.sql,
+            key_hint=key_hint,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
