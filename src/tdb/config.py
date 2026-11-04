@@ -51,6 +51,18 @@ def check_api_keys(other_login: bool = False) -> None:
         raise InsecureApiKeyError(f"TDB_API_KEYS is not set. {generate}")
 
 
+def get_audit_sql_mode() -> str:
+    """`full`, the default, or `redacted`. Anything else stops startup (check below)."""
+    return os.environ.get("TDB_AUDIT_SQL", "full").strip().lower() or "full"
+
+
+def check_audit_sql_mode() -> None:
+    """A mistyped `redacted` must not quietly log every value in full."""
+    mode = get_audit_sql_mode()
+    if mode not in ("full", "redacted"):
+        raise ValueError(f"TDB_AUDIT_SQL must be 'full' or 'redacted', not {mode!r}")
+
+
 def get_log_file() -> str:
     return os.environ.get("TDB_LOG_FILE", "tdb_audit.jsonl")
 

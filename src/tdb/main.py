@@ -9,6 +9,7 @@ Environment variables:
                     start without one, or with an example value
     TDB_LOG_FILE    Path for the JSON audit log  (default: tdb_audit.jsonl)
     TDB_LOG_LEVEL   Logging level  (default: INFO)
+    TDB_AUDIT_SQL   `full` (default) or `redacted`: keep statement values out of logs
 """
 
 from __future__ import annotations
@@ -22,7 +23,13 @@ from fastapi.responses import JSONResponse
 
 from tdb import __version__
 from tdb.audit.logger import get_logger
-from tdb.config import InsecureApiKeyError, check_api_keys, get_log_level
+from tdb.config import (
+    InsecureApiKeyError,
+    check_api_keys,
+    check_audit_sql_mode,
+    get_audit_sql_mode,
+    get_log_level,
+)
 from tdb.connectors.csv import close_engine as close_csv_engine
 from tdb.registry.migrations import run_migrations
 from tdb.routers.mcp import router as mcp_router
@@ -46,9 +53,10 @@ async def lifespan(app: FastAPI):
         _log.error("api_key_refused")
         print(f"\n⛔  {exc}\n")
         raise
+    check_audit_sql_mode()
     os.makedirs("data", exist_ok=True)
     run_migrations()
-    _log.info("tdb_startup version=%s", __version__)
+    _log.info("tdb_startup version=%s audit_sql=%s", __version__, get_audit_sql_mode())
     yield
     # Shutdown: release the shared DuckDB engine the CSV connector runs on.
     close_csv_engine()

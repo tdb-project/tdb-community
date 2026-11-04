@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from contextvars import ContextVar
 from datetime import UTC, datetime
 
-from tdb.config import get_log_file
+from tdb.audit.redact import redact_fields, redact_log_value
+from tdb.config import get_audit_sql_mode, get_log_file
 
 # Which MCP client wrote an entry, and at what protocol version: set by the MCP
 # endpoint for the request it serves, unset on every other path.
@@ -28,10 +30,29 @@ def _escaped(value: object) -> object:
     return value
 
 
+def _redact_record(record: logging.LogRecord) -> None:
+    """With TDB_AUDIT_SQL=redacted, a log line holds no value from a statement either.
+    A traceback is withheld for its exception's message, which can quote the SQL."""
+    if get_audit_sql_mode() != "redacted":
+        return
+    if record.args:
+        if isinstance(record.args, tuple):
+            record.args = tuple(redact_log_value(a) for a in record.args)
+        elif isinstance(record.args, dict):
+            record.args = {k: redact_log_value(v) for k, v in record.args.items()}
+    else:
+        record.msg = redact_log_value(record.msg)
+    if record.exc_info and record.exc_info[0] is not None:
+        kind = record.exc_info[0].__name__
+        record.msg = f"{record.msg} [{kind}: traceback withheld by TDB_AUDIT_SQL]"
+        record.exc_info = None
+
+
 def _escaping_record_factory(base):
     def factory(*args, **kwargs):
         record = base(*args, **kwargs)
         if record.name == "tdb" or record.name.startswith(("tdb.", "tdb_enterprise")):
+            _redact_record(record)
             record.msg = _escaped(record.msg)
             if isinstance(record.args, tuple):
                 record.args = tuple(_escaped(a) for a in record.args)
@@ -54,7 +75,11 @@ def get_logger(name: str) -> logging.Logger:
 
 
 def _append(entry: dict) -> None:
-    with open(get_log_file(), "a") as f:
+    if get_audit_sql_mode() == "redacted":
+        entry = redact_fields(entry)
+    # 0640 when it creates the file: entries can hold what callers typed.
+    descriptor = os.open(get_log_file(), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o640)
+    with os.fdopen(descriptor, "a") as f:
         f.write(json.dumps(entry) + "\n")
 
 
