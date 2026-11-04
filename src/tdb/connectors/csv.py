@@ -13,8 +13,8 @@ The connector exposes the CSV as a table called `data`.
 Users can also use the source's registered name as the table name —
 we rewrite the SQL before execution.
 
-Queries run against a shared DuckDB engine (see `_engine`) rather than a fresh
-in-memory instance per query. Building and tearing down an instance cost
+Queries run on a DuckDB engine kept open for the file (see `_engine`) rather than a
+fresh in-memory instance per query. Building and tearing down an instance cost
 70-130 ms whatever the file size, and — because each instance claims a thread per
 core — concurrent queries oversubscribed the CPU badly enough that throughput
 *fell* as load rose. See `_engine` for the measurements.
@@ -28,6 +28,9 @@ from __future__ import annotations
 
 import os
 import threading
+from collections import OrderedDict
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -37,93 +40,110 @@ from tdb.config import get_allowed_data_dir
 from tdb.connectors.base import BaseConnector, ConnectorResult, QueryError
 from tdb.engine.validator import strip_trailing_semicolon
 
-_ENGINES: dict[str, duckdb.DuckDBPyConnection] = {}
+# One open engine holds about 5 MB and a thread, so idle ones are closed past this.
+# A query that has to reopen one pays about 26 ms.
+_MAX_ENGINES = 32
+
+
+@dataclass
+class _Slot:
+    connection: duckdb.DuckDBPyConnection
+    users: int = 0
+
+
+_ENGINES: OrderedDict[str, _Slot] = OrderedDict()
 _ENGINE_LOCK = threading.Lock()
 
 
 class SqlFileAccessError(PermissionError):
-    """SQL named a file outside the source's data directory."""
+    """SQL named a file other than the source's own."""
 
 
 class SqlRefusedError(ValueError):
     """DuckDB's own parser read the SQL as something other than one SELECT."""
 
 
-def _data_root(file_path: str) -> str:
+def _open_engine(path: str) -> duckdb.DuckDBPyConnection:
     """
-    The directory SQL on this source may read files from: `TDB_ALLOWED_DATA_DIR`
-    when set, otherwise the directory holding the registered CSV.
+    A DuckDB instance that can read *path* and no other file.
+
+    DuckDB resolves paths written inside the SQL — `read_csv(...)`, `read_text(...)`,
+    `glob(...)` — not only the file TDB registers, so `path_is_allowed()` alone confines
+    registration and nothing else. External access is therefore off except for this one
+    file, extension autoloading is off, and the configuration is locked, so a `SET` in a
+    query cannot undo any of it. The order of the `SET`s matters: DuckDB refuses to
+    change the allowed lists once external access is disabled.
+
+    It used to allow the whole data directory, so a source could read every other file
+    mounted there. An independent review found it; the file reads were reproduced on the
+    published image (tdb-internal/spikes/finding2-file-engine).
     """
-    allowed = get_allowed_data_dir()
-    root = allowed if allowed else os.path.dirname(os.path.realpath(file_path))
-    return os.path.realpath(root)
+    engine = duckdb.connect(":memory:")
+    try:
+        engine.execute("SET allowed_paths = ?", [[path]])
+        engine.execute("SET allowed_directories = []")
+        engine.execute("SET autoinstall_known_extensions = false")
+        engine.execute("SET autoload_known_extensions = false")
+        engine.execute("SET enable_external_access = false")
+        engine.execute("SET lock_configuration = true")
+    except BaseException:
+        engine.close()
+        raise
+    return engine
 
 
-def _engine(root: str) -> duckdb.DuckDBPyConnection:
+def _close_idle_engines() -> None:
+    """Oldest first, down to the cap. Call with _ENGINE_LOCK held."""
+    for path in [p for p, slot in _ENGINES.items() if slot.users == 0]:
+        if len(_ENGINES) <= _MAX_ENGINES:
+            return
+        _ENGINES.pop(path).connection.close()
+
+
+@contextmanager
+def _engine(file_path: str) -> Iterator[duckdb.DuckDBPyConnection]:
     """
-    The DuckDB instance every CSV query under *root* runs on.
+    The DuckDB instance this file's queries run on, kept open between them.
 
-    **It can reach no file outside *root*.** DuckDB resolves paths written
-    inside the SQL — `read_csv('/etc/passwd')`, `read_text(...)` — not only the
-    file TDB registers, so `path_is_allowed()` alone confined registration and
-    nothing else: any SELECT could read any file the process could. External
-    access is therefore off except for *root*, extension autoloading is off, and
-    the configuration is locked, so a `SET` in a query cannot undo any of it.
-    The order of the `SET`s matters: DuckDB refuses to change
-    `allowed_directories` once external access is disabled.
-
-    One engine per root rather than one per process: the allowed directory is
-    fixed when the engine is locked. In Docker `TDB_ALLOWED_DATA_DIR` is set, so
-    that is still exactly one engine.
-
-    Previously each query opened `duckdb.connect(":memory:")` and closed it
-    again. That was expensive in two compounding ways, measured on a 5.4 MB
-    100k-row CSV:
+    Opening one for each query was expensive in two compounding ways, measured on a
+    5.4 MB 100k-row CSV:
 
     - **Instance lifecycle, 70-130 ms per query regardless of file size.**
-      On a 1,000-row CSV the connect/close pair was more than half the total
-      time — longer spent building an engine than using it.
-    - **Thread oversubscription under concurrency.** DuckDB claims one thread
-      per core by default, and every concurrent query had its *own* instance
-      doing so. At 16 concurrent queries on a 6-core host that is 96 threads
-      competing for 6 cores: p50 went 228 ms -> 50.9 s and throughput *fell*
-      from 4.29 to 0.35 req/s. Load made the server slower in absolute terms.
+    - **Thread oversubscription under concurrency.** DuckDB claims one thread per core
+      by default, and every concurrent query had its *own* instance doing so. At 16
+      concurrent queries on a 6-core host, p50 went 228 ms -> 50.9 s and throughput
+      *fell* from 4.29 to 0.35 req/s. Load made the server slower in absolute terms.
 
-    One shared instance fixes both: 105 ms at 1 worker (from 228 ms) and
-    28 req/s at 16 workers (from 0.35), with total memory flat at ~5 MB
-    instead of ~5 MB per in-flight query.
+    Keeping an instance per file fixes both. This edition has one source, so one engine
+    at a time claims the threads.
 
-    **One engine is enough for every source under a root.** Each query registers
-    its file on its own cursor, and cursor registrations are isolated — two
-    sources can both call their table `data` concurrently without seeing each
-    other. So there is no per-source cache to bound, and nothing grows with the
-    number of registered sources.
-
-    Nothing is cached *about the file itself*: the registration is a lazy view
-    over `read_csv`, re-bound per query, so appended rows and added or removed
-    columns are all picked up. Materialising the CSV into a table would be
-    another ~6x faster and is deliberately not done — it would hold the file in
-    RAM at ~2.3x its size, against the rule that the row cap must bound memory
-    and not merely the response, and it goes stale on edits.
+    Nothing is cached *about the file itself*: the registration is a lazy view over
+    `read_csv`, re-bound per query, so appended rows and added or removed columns are
+    all picked up. Materialising the CSV into a table would be another ~6x faster and is
+    deliberately not done — it would hold the file in RAM at ~2.3x its size, against the
+    rule that the row cap must bound memory and not merely the response, and it goes
+    stale on edits.
     """
+    path = os.path.realpath(file_path)
     with _ENGINE_LOCK:
-        engine = _ENGINES.get(root)
-        if engine is None:
-            engine = duckdb.connect(":memory:")
-            engine.execute("SET allowed_directories = ?", [[root + os.sep]])
-            engine.execute("SET autoinstall_known_extensions = false")
-            engine.execute("SET autoload_known_extensions = false")
-            engine.execute("SET enable_external_access = false")
-            engine.execute("SET lock_configuration = true")
-            _ENGINES[root] = engine
-        return engine
+        slot = _ENGINES.get(path)
+        if slot is None:
+            slot = _ENGINES[path] = _Slot(_open_engine(path))
+        _ENGINES.move_to_end(path)
+        slot.users += 1
+    try:
+        yield slot.connection
+    finally:
+        with _ENGINE_LOCK:
+            slot.users -= 1
+            _close_idle_engines()
 
 
 def close_engine() -> None:
     """Close every engine. Called at shutdown, and between tests."""
     with _ENGINE_LOCK:
-        for engine in _ENGINES.values():
-            engine.close()
+        for slot in _ENGINES.values():
+            slot.connection.close()
         _ENGINES.clear()
 
 
@@ -165,6 +185,16 @@ class CsvConnector(BaseConnector):
             allowed_real + os.sep
         )
 
+    @contextmanager
+    def _cursor(self) -> Iterator[duckdb.DuckDBPyConnection]:
+        """A cursor on this file's engine."""
+        with _engine(self._file_path) as engine:
+            cur = engine.cursor()
+            try:
+                yield cur
+            finally:
+                cur.close()
+
     def get_schema(self) -> dict[str, str]:
         """
         Return column-name → DuckDB type mapping.
@@ -172,12 +202,9 @@ class CsvConnector(BaseConnector):
         """
         if not self.path_is_allowed():
             raise PermissionError("file_path is outside the allowed data directory")
-        cur = _engine(_data_root(self._file_path)).cursor()
-        try:
-            rel = cur.read_csv(self._file_path)
+        with self._cursor() as cur:
+            rel = cur.read_csv(os.path.realpath(self._file_path))
             return {col: str(dtype) for col, dtype in zip(rel.columns, rel.dtypes)}
-        finally:
-            cur.close()
 
     def execute(self, sql: str, limit: int = 100) -> ConnectorResult:
         """
@@ -200,42 +227,37 @@ class CsvConnector(BaseConnector):
         # while the docs promise the flag means "you got everything".
         sql_to_run = _inject_limit(strip_trailing_semicolon(sql), limit + 1)
 
-        # A cursor on the shared engine, not a new engine. The registration is
-        # cursor-local, so concurrent queries against different sources can each
-        # call their own file 'data' without colliding.
-        cur = _engine(_data_root(self._file_path)).cursor()
-        try:
-            # Register the CSV as a virtual table called 'data' via the
-            # DuckDB relation API — no SQL string interpolation needed.
-            cur.register("data", cur.read_csv(self._file_path))
-            # The engine's parser has the last word on what will run. validate_sql()
-            # scans text, and a text scanner that misjudges where a literal ends
-            # can be shown one statement while DuckDB executes several — every
-            # statement in the string, returning only the last result.
-            statements = cur.extract_statements(sql_to_run)
-            if len(statements) != 1 or (
-                statements[0].type != duckdb.StatementType.SELECT
-            ):
-                raise SqlRefusedError("Only a single SELECT statement is allowed.")
+        with self._cursor() as cur:
             try:
-                cursor = cur.execute(sql_to_run)
-            except duckdb.PermissionException as exc:
-                raise SqlFileAccessError(
-                    "SQL may only read files in the source's data directory."
-                ) from exc
-            columns = [desc[0] for desc in cursor.description]
-            # fetchmany, not fetchall: the community edition guarantees "max
-            # `limit` rows per response", and _inject_limit only adds a LIMIT
-            # when the token is absent — so a user-supplied `LIMIT 99999`, or a
-            # query that merely contains the word, would otherwise turn every
-            # row the query produced into Python objects before being sliced.
-            rows_raw = cursor.fetchmany(limit + 1)
-        except (duckdb.ProgrammingError, duckdb.DataError) as exc:
-            # Parser, binder and catalog errors, and casts that fail on a row (which
-            # surface during the fetch). File-access refusals are not among them.
-            raise QueryError(str(exc)) from exc
-        finally:
-            cur.close()
+                # Register the CSV as a virtual table called 'data' via the
+                # DuckDB relation API — no SQL string interpolation needed.
+                cur.register("data", cur.read_csv(os.path.realpath(self._file_path)))
+                # The engine's parser has the last word on what will run. validate_sql()
+                # scans text, and a text scanner that misjudges where a literal ends
+                # can be shown one statement while DuckDB executes several — every
+                # statement in the string, returning only the last result.
+                statements = cur.extract_statements(sql_to_run)
+                if len(statements) != 1 or (
+                    statements[0].type != duckdb.StatementType.SELECT
+                ):
+                    raise SqlRefusedError("Only a single SELECT statement is allowed.")
+                try:
+                    cursor = cur.execute(sql_to_run)
+                except duckdb.PermissionException as exc:
+                    raise SqlFileAccessError(
+                        "SQL may only read this source's own file."
+                    ) from exc
+                columns = [desc[0] for desc in cursor.description]
+                # fetchmany, not fetchall: the community edition guarantees "max
+                # `limit` rows per response", and _inject_limit only adds a LIMIT
+                # when the token is absent — so a user-supplied `LIMIT 99999`, or a
+                # query that merely contains the word, would otherwise turn every
+                # row the query produced into Python objects before being sliced.
+                rows_raw = cursor.fetchmany(limit + 1)
+            except (duckdb.ProgrammingError, duckdb.DataError) as exc:
+                # Parser, binder and catalog errors, and casts that fail on a row (which
+                # surface during the fetch). File-access refusals are not among them.
+                raise QueryError(str(exc)) from exc
 
         # One row beyond the ceiling is what distinguishes a cut result from a
         # complete one.

@@ -577,7 +577,7 @@ of `SELECT *`).
 
 | Feature | Details |
 |---|---|
-| CSV data source | One registered source at a time, confined to the data directory |
+| CSV data source | One registered source at a time; SQL reads only that file |
 | Auto schema detection | Column names and types inferred from CSV |
 | SQL query endpoint | Read-only: `SELECT` and `WITH` only, one statement per query; writes are refused and audited |
 | Row limit | Max 1,000 rows per response, with `truncated` telling you when rows were withheld |
