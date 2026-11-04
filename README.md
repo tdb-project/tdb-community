@@ -583,7 +583,7 @@ of `SELECT *`).
 | Row limit | Max 1,000 rows per response, with `truncated` telling you when rows were withheld |
 | API key auth | `Authorization: Bearer <key>` — single static key |
 | MCP server | One tool, `query_source`, for Claude, Cursor, VS Code and other MCP clients; speaks MCP `2026-07-28` and the earlier handshake revisions |
-| Audit log | Every query and every refused attempt, as NDJSON (`TDB_LOG_FILE`); MCP entries name the AI client |
+| Audit log | Every query, refused attempt and failed query, as NDJSON (`TDB_LOG_FILE`); MCP entries name the AI client; `TDB_AUDIT_SQL=redacted` keeps values out |
 | CLI | `tdb serve`, `tdb register`, `tdb query` |
 | Docker | One `docker run`, or Docker Compose for a persistent setup |
 | OpenAPI / Swagger | Auto-generated at `/docs` |
