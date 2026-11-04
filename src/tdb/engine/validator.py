@@ -170,7 +170,9 @@ def _quote_end(sql: str, i: int, d: _Dialect) -> int:
     return -1
 
 
-def _mask_noncode(sql: str, dialect: _Dialect = _ANSI) -> str:
+def _mask_noncode(
+    sql: str, dialect: _Dialect = _ANSI, hide_unterminated: bool = False
+) -> str:
     """
     Blank out the contents of string literals, quoted identifiers and comments
     as *dialect* reads them, leaving executable SQL — and the offsets of
@@ -191,6 +193,9 @@ def _mask_noncode(sql: str, dialect: _Dialect = _ANSI) -> str:
     backslashes and dollar-quotes could only over-reject. The opposite held: a
     quote character *inside* a region another engine treats as data opened a
     string here and hid the SQL that followed it.
+
+    `hide_unterminated` is for redacting a log, where the risk is the opposite: an
+    unterminated region and the body of an executable comment are hidden as data.
     """
     out = list(sql)
     i, n = 0, len(sql)
@@ -199,8 +204,13 @@ def _mask_noncode(sql: str, dialect: _Dialect = _ANSI) -> str:
         for k in range(a, b):
             out[k] = " "
 
+    def unterminated(start: int) -> str:
+        if hide_unterminated:
+            blank(start, n)
+        return "".join(out)
+
     while i < n:
-        if sql.startswith(_EXECUTABLE_COMMENT, i):
+        if sql.startswith(_EXECUTABLE_COMMENT, i) and not hide_unterminated:
             i += len(_EXECUTABLE_COMMENT)
             continue
         if _line_comment_at(sql, i, dialect):
@@ -212,7 +222,7 @@ def _mask_noncode(sql: str, dialect: _Dialect = _ANSI) -> str:
         if sql.startswith("/*", i):
             end = _block_comment_end(sql, i, dialect)
             if end == -1:
-                return "".join(out)
+                return unterminated(i)
             blank(i, end)
             i = end
             continue
@@ -222,14 +232,14 @@ def _mask_noncode(sql: str, dialect: _Dialect = _ANSI) -> str:
                 tag = m.group(0)
                 close = sql.find(tag, m.end())
                 if close == -1:
-                    return "".join(out)
+                    return unterminated(i)
                 blank(i, close + len(tag))
                 i = close + len(tag)
                 continue
         if any(sql[i] == o for o, _ in _QUOTES):
             j = _quote_end(sql, i, dialect)
             if j == -1:
-                return "".join(out)
+                return unterminated(i)
             blank(i, j + 1)
             i = j + 1
             continue

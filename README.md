@@ -642,6 +642,7 @@ All configuration is via environment variables:
 |---|---|---|
 | `TDB_API_KEYS` | — | Required. Comma-separated list of valid API keys |
 | `TDB_REGISTRY_DB` | `data/tdb_registry.db` | SQLite registry path |
+| `TDB_AUDIT_SQL` | `full` | `redacted` replaces values in stored statements and engine errors with `?`, and adds `sql_redacted` and `sql_sha256` |
 | `TDB_LOG_FILE` | `tdb_audit.jsonl` | Audit log output path. Default writes to the server's working directory; `.env.example` overrides this to `logs/tdb_audit.jsonl` for Docker. |
 | `TDB_LOG_LEVEL` | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `TDB_PORT` | `8000` | Server port. Used by both Docker Compose and the local `tdb serve` command. |

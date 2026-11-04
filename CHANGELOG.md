@@ -9,6 +9,23 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-11-04
+
+> **`TDB_AUDIT_SQL=redacted` keeps statement values out of TDB's logs.** SQL can hold customer data
+> and secrets in its literals, so a log storing it as written is sensitive data too. Found by an
+> independent review. The default stays `full`: nothing changes unless you set it.
+
+### Added
+- **`TDB_AUDIT_SQL`**: `full` (default) or `redacted`. Redacted entries store the statement with
+  literals, numbers and comments replaced by `?`, plus `sql_redacted` and `sql_sha256`, a fingerprint
+  of the redacted text for grouping runs of one statement. A mistyped value stops startup.
+- **Scope:** statement text in the audit log, and engine errors and tracebacks in the application log.
+- **What it costs:** an investigation can see what ran, but not with which values.
+
+### Changed
+- **New audit log files are created with mode 0600**, readable only by the user TDB runs as. Existing
+  files keep theirs. A log shipper running as another user needs access granted to a new file.
+
 ## [0.15.0] — 2026-11-04
 
 > **Security: SQL reads only the registered file.** SQL on a CSV source could read any other

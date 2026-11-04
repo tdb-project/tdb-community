@@ -893,3 +893,27 @@ class TestP20SqlReadsOnlyTheRegisteredFile:
         assert connector.execute("SELECT * FROM data", limit=10).rows == expected
         by_path = f"SELECT * FROM read_csv('{tmp_path}/orders.csv')"
         assert connector.execute(by_path, limit=10).rows == expected
+
+
+class TestP21RedactedSqlIsTheSameInBothEditions:
+    """P21 — `TDB_AUDIT_SQL=redacted` gives the same text in both editions."""
+
+    @pytest.mark.parametrize(
+        "sql,expected",
+        [
+            (
+                "SELECT a FROM t WHERE b = 'x' AND c = 5",
+                "SELECT a FROM t WHERE b = ? AND c = ?",
+            ),
+            ("SELECT 1 -- note", "SELECT ? ?"),
+            (
+                "SELECT a FROM t WHERE b = $$x$$ AND c = $1",
+                "SELECT a FROM t WHERE b = ? AND c = $1",
+            ),
+            ("SELECT a FROM t WHERE b = 'x", "SELECT a FROM t WHERE b = ?"),
+        ],
+    )
+    def test_the_text(self, sql: str, expected: str) -> None:
+        from tdb.audit.redact import redact_sql
+
+        assert redact_sql(sql) == expected
