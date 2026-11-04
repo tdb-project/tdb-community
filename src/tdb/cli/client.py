@@ -17,7 +17,9 @@ def get_api_key() -> str:
         raise RuntimeError(
             "TDB_API_KEYS environment variable is not set.\n"
             "Set it to your API key before using the CLI.\n"
-            "Example: export TDB_API_KEYS=your-secret-key"
+            "Generate one: "
+            "export TDB_API_KEYS=$(python3 -c "
+            '"import secrets; print(secrets.token_hex(32))")'
         )
     return key
 
