@@ -604,8 +604,8 @@ of `SELECT *`).
 | Audit log | Local NDJSON | Hash-chained and verifiable, sealed-segment retention, Splunk and S3 export |
 | Observability | Health check | Prometheus metrics, schema caching |
 
-On the roadmap and **not in either edition yet**: SSO / SAML / SCIM and column-level
-access control.
+The commercial edition's Mid-Market tier adds column and row policies, and single sign-on
+(OIDC) with SCIM. SAML is built on request.
 
 See the [full edition comparison](https://docs.tdb.jiracorp.co.in/pricing/) — email <hello@tdb.jiracorp.co.in> for pricing and a free 30-day evaluation.
 
