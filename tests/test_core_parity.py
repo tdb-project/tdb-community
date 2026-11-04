@@ -860,9 +860,7 @@ class TestP20SqlReadsOnlyTheRegisteredFile:
         (tmp_path / "notes.txt").write_text("P20-SECRET\n")
         (tmp_path / "sub" / "deep.csv").write_text("k\nP20-SECRET\n")
         (tmp_path / "link.csv").symlink_to(tmp_path / "payroll.csv")
-        return CsvConnector(
-            connection={"file_path": str(tmp_path / "orders.csv")}
-        )
+        return CsvConnector(connection={"file_path": str(tmp_path / "orders.csv")})
 
     @pytest.mark.parametrize(
         "template",
