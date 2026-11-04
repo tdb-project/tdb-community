@@ -47,6 +47,12 @@ _log = get_logger("tdb.main")
 async def lifespan(app: FastAPI):
     """Run setup tasks on startup; yield to serve requests; clean up on shutdown."""
     logging.root.setLevel(getattr(logging, get_log_level()))
+    # Under uvicorn the root logger has no handler, so only warnings would reach the
+    # console and TDB_LOG_LEVEL would do nothing below that.
+    if not logging.root.handlers:
+        _console = logging.StreamHandler()
+        _console.setFormatter(logging.Formatter("%(levelname)s:     %(message)s"))
+        logging.root.addHandler(_console)
     try:
         check_api_keys()
     except InsecureApiKeyError as exc:
