@@ -596,11 +596,11 @@ of `SELECT *`).
 |---|---|---|
 | Data sources | One CSV source | CSV, Parquet, DuckDB, PostgreSQL, MySQL, SQL Server, Snowflake; unlimited sources |
 | Auth | Single static API key | Key rotation and management, JWT, OAuth 2.1 with PKCE, per-key rate limits; single sign-on (OIDC) and SCIM on Mid-Market |
-| Access control | — | RBAC (read / readwrite / admin), MCP tool allow-lists per key; column and row policies on Mid-Market |
+| Access control | — | RBAC (read / readwrite / admin), MCP tool allow-lists per key; column and row policies and query approvals (a person approves sensitive reads) on Mid-Market |
 | MCP | `query_source` | Seven tools, prompt-injection filtering, schema annotations |
 | SQL clients and BI tools | — | PostgreSQL wire gateway: Metabase, DBeaver, `psql` connect unchanged |
 | Named views | — | YAML views with typed parameters |
-| Row limit | 1,000 per response | 1,000 by default, configurable |
+| Row limit | 1,000 per response | 1,000 by default, configurable; page with a cursor or stream past it |
 | Audit log | Local NDJSON | Hash-chained and verifiable, sealed-segment retention, Splunk and S3 export |
 | Observability | Health check | Prometheus metrics, schema caching |
 
