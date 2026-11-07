@@ -41,9 +41,9 @@ The following are **known design constraints** of the Community Edition, not vul
 | Single static API key | No rotation, no expiry. Use a long random string. Rotate manually by restarting the server with a new `TDB_API_KEYS` value. |
 | Mutable audit log | The NDJSON audit file can be deleted or modified by anyone with filesystem access. For tamper-evident logs, see TDB Enterprise. |
 | No PII masking | SQL queries and their results are not scanned for personally identifiable information. Avoid querying columns containing raw PII through the API. |
-| Full SQL logged | The complete SQL query text is written to the audit log. Do not embed sensitive literal values (e.g. SSNs, passwords) directly in WHERE clauses. |
+| Full SQL logged by default | The complete SQL query text is written to the audit log unless `TDB_AUDIT_SQL=redacted` (from 0.16.0), which replaces literals, numbers and comments with `?` and records a SHA-256 fingerprint instead. |
 | No rate limiting | Community Edition has no built-in throttling. Place TDB behind a reverse proxy (nginx, Caddy) if public-facing. |
-| SELECT-only enforcement | The SQL validator blocks INSERT, UPDATE, DELETE, DROP, CREATE, EXEC, and semicolons. It does not sanitise query results; ensure your CSV files do not contain executable content consumed by downstream clients. |
+| SELECT-only enforcement | One `SELECT` (or `WITH … SELECT`) per query: write keywords and a second statement are refused, read under every engine's quoting rules, and DuckDB's own parser must see exactly one `SELECT`. A query can read only the registered file. Query *results* are not sanitised; ensure your CSV files do not contain executable content consumed by downstream clients. |
 
 ## Security Best Practices for Deployment
 
