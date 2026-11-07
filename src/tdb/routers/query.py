@@ -18,12 +18,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import duckdb
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from tdb.audit.logger import get_logger, log_denial, log_query
 from tdb.auth.apikey import require_api_key
 from tdb.connectors.base import QueryError
 from tdb.connectors.csv import CsvConnector, SqlFileAccessError, SqlRefusedError
+from tdb.connectors.failures import failure_reason
 from tdb.engine.validator import validate_sql
 from tdb.models import QueryRequest, QueryResponse
 from tdb.registry.store import get_source_by_ref
@@ -174,7 +176,7 @@ def run_query(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This source's file is outside the allowed data directory.",
         ) from exc
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, duckdb.IOException) as exc:
         # The source's backing file is gone/unreadable (e.g. removed after
         # registration). This is a source-availability problem, not a server
         # fault — return 503 (matching the schema endpoint) and don't echo the
@@ -223,14 +225,14 @@ def run_query(
         )
         log_denial(
             action="query",
-            reason="internal_error",
+            reason=failure_reason(exc),
             source_id=source.id,
             sql=body.sql,
             key_hint=key_hint,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Query execution failed: {exc}",
+            detail="Query execution failed: internal error",
         ) from exc
 
     executed_at = datetime.now(UTC)
@@ -252,7 +254,7 @@ def run_query(
 
     # 6. Respond
     return QueryResponse(
-        source_id=body.source_id,
+        source_id=source.id,
         sql=body.sql,
         rows_returned=len(result.rows),
         columns=result.columns,

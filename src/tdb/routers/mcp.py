@@ -40,7 +40,8 @@ from fastapi.responses import JSONResponse, Response
 
 from tdb import __version__, lean
 from tdb.audit.logger import get_logger, log_denial, log_query, mcp_caller
-from tdb.config import get_api_keys
+from tdb.auth.apikey import bearer_token, is_valid_api_key
+from tdb.connectors.base import QueryError
 from tdb.connectors.csv import CsvConnector, SqlFileAccessError, SqlRefusedError
 from tdb.connectors.failures import failure_reason
 from tdb.engine.validator import validate_sql
@@ -313,8 +314,8 @@ def _query_source(request_id: Any, params: dict, api_key: str) -> dict:
         )
 
     if source_name:
-        matching = [s for s in sources if s.name == source_name]
-        if not matching:
+        source = store.get_source_by_ref(source_name)
+        if source is None:
             names = [s.name for s in sources]
             log_denial(
                 action="mcp_query",
@@ -326,7 +327,6 @@ def _query_source(request_id: Any, params: dict, api_key: str) -> dict:
             return _tool_error(
                 request_id, f"Source '{source_name}' not found. Available: {names}"
             )
-        source = matching[0]
     else:
         source = sources[0]
 
@@ -353,14 +353,27 @@ def _query_source(request_id: Any, params: dict, api_key: str) -> dict:
         return _tool_error(request_id, str(exc))
     except Exception as exc:
         _log.error("mcp_query_error — %s", str(exc))
+        reason = failure_reason(exc)
         log_denial(
             action="mcp_query",
-            reason=failure_reason(exc),
+            reason=reason,
             source_id=source.id,
             sql=sql,
             key_hint=key_hint,
         )
-        return _tool_error(request_id, f"Query execution error: {exc}")
+        if isinstance(exc, QueryError):
+            return _tool_error(request_id, f"Query execution error: {exc}")
+        if reason == "source_unavailable":
+            return _tool_error(
+                request_id,
+                f"Source '{source.name}' is not accessible — its underlying "
+                "file is missing or unreadable.",
+            )
+        if reason == "path_outside_allowed_dir":
+            return _tool_error(
+                request_id, "This source's file is outside the allowed data directory."
+            )
+        return _tool_error(request_id, "Query execution error: internal error")
 
     _log.info(
         "mcp_query_executed source_name=%s rows_returned=%d",
@@ -413,8 +426,8 @@ def _origin_allowed(request: Request) -> bool:
 
 def _authenticate(request: Request, request_id: Any) -> tuple[str, JSONResponse | None]:
     auth_header = request.headers.get("Authorization", "")
-    token = auth_header.removeprefix("Bearer ").strip()
-    if token in get_api_keys():
+    token = bearer_token(auth_header)
+    if token and is_valid_api_key(token):
         return token, None
     log_denial(
         action="mcp_auth",

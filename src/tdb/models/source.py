@@ -23,30 +23,6 @@ class SourceStatus(StrEnum):
     ERROR = "error"
 
 
-class SourceBase(BaseModel):
-    name: str = Field(
-        ..., min_length=1, max_length=100, description="Human-readable name"
-    )
-    description: str = Field(default="", max_length=500)
-    source_type: SourceType
-    path: str = Field(..., description="File path or connection string")
-
-
-class SourceCreate(SourceBase):
-    pass
-
-
-class Source(SourceBase):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    status: SourceStatus = SourceStatus.ACTIVE
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    row_count: int | None = None
-    column_count: int | None = None
-
-    model_config = {"from_attributes": True}
-
-
 class SchemaColumn(BaseModel):
     name: str
     type: str
@@ -68,16 +44,6 @@ class QueryRequest(BaseModel):
         le=1_000,
         description="Max rows to return (default 100, hard cap 1,000)",
     )
-
-
-class QueryResult(BaseModel):
-    source_id: str
-    sql: str
-    columns: list[str]
-    rows: list[dict]
-    row_count: int
-    truncated: bool = False
-    executed_in_ms: float
 
 
 class QueryResponse(BaseModel):

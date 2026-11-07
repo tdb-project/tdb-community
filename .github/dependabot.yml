@@ -8,3 +8,8 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+  # The base image in the Dockerfile.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly

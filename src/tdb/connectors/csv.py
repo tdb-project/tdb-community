@@ -27,6 +27,7 @@ Day-N upgrade ideas:
 from __future__ import annotations
 
 import os
+import re
 import threading
 from collections import OrderedDict
 from collections.abc import Iterator
@@ -38,7 +39,7 @@ import duckdb
 
 from tdb.config import get_allowed_data_dir
 from tdb.connectors.base import BaseConnector, ConnectorResult, QueryError
-from tdb.engine.validator import strip_trailing_semicolon
+from tdb.engine.validator import _mask_noncode, strip_trailing_semicolon
 
 # One open engine holds about 5 MB and a thread, so idle ones are closed past this.
 # A query that has to reopen one pays about 26 ms.
@@ -273,13 +274,16 @@ class CsvConnector(BaseConnector):
 # ---------------------------------------------------------------------------
 
 
+_LIMIT_CLAUSE = re.compile(r"\bLIMIT\b", re.IGNORECASE)
+
+
 def _inject_limit(sql: str, limit: int) -> str:
     """
     Append LIMIT <n> if the query does not already contain a LIMIT clause.
-    This is a simple heuristic – good enough for Day-3.
+    Read on the masked text, so `credit_limit`, `'no limit'` or `-- limit` is
+    not taken for one.
     """
-    normalised = sql.strip().upper()
-    if "LIMIT" not in normalised:
+    if not _LIMIT_CLAUSE.search(_mask_noncode(sql)):
         # On its own line: a trailing `-- comment` would otherwise swallow it.
         return f"{sql.strip()}\nLIMIT {limit}"
     return sql

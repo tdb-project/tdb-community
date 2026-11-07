@@ -1,3 +1,5 @@
+import hmac
+
 from fastapi import HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -7,10 +9,20 @@ from tdb.config import get_api_keys
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
+def is_valid_api_key(token: str) -> bool:
+    return any(hmac.compare_digest(token, key) for key in get_api_keys())
+
+
+def bearer_token(authorization: str) -> str:
+    """The credentials of a `Bearer` Authorization header, as HTTPBearer reads it."""
+    scheme, _, credentials = authorization.partition(" ")
+    return credentials.strip() if scheme.lower() == "bearer" else ""
+
+
 def require_api_key(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
 ):
-    if credentials is None or credentials.credentials not in get_api_keys():
+    if credentials is None or not is_valid_api_key(credentials.credentials):
         presented = credentials.credentials if credentials else ""
         log_denial(
             action="auth",
