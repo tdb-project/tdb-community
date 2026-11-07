@@ -39,6 +39,9 @@ def register_source(req: SourceRegistrationRequest, registered_by: str) -> Sourc
     """
     conn = get_connection()
     try:
+        # Write lock before the count: two deferred transactions could both count
+        # zero and both insert.
+        conn.execute("BEGIN IMMEDIATE")
         count = conn.execute("SELECT COUNT(*) FROM sources").fetchone()[0]
         if count >= 1:
             raise ValueError(

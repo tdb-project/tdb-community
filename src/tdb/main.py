@@ -28,6 +28,7 @@ from tdb.config import (
     check_api_keys,
     check_audit_sql_mode,
     get_audit_sql_mode,
+    get_log_file,
     get_log_level,
 )
 from tdb.connectors.csv import close_engine as close_csv_engine
@@ -61,6 +62,7 @@ async def lifespan(app: FastAPI):
         raise
     check_audit_sql_mode()
     os.makedirs("data", exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(get_log_file())), exist_ok=True)
     run_migrations()
     _log.info("tdb_startup version=%s audit_sql=%s", __version__, get_audit_sql_mode())
     yield
@@ -92,8 +94,6 @@ app = FastAPI(
 app.include_router(sources_router, prefix="/v1")
 app.include_router(query_router, prefix="/v1")
 app.include_router(mcp_router, prefix="/v1")
-
-_log = get_logger("tdb.main")
 
 # ---------------------------------------------------------------------------
 # Health / root endpoints  (no auth needed)

@@ -9,6 +9,46 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-11-07
+
+> **Fixes from an independent review of 0.17.1.** Each finding was reproduced before it was fixed.
+> Two of them change what a client sees, so this is a minor release.
+
+### Changed
+- **MCP needs the `Bearer` scheme, in any case.** `/v1/mcp` accepted a key sent with no scheme
+  (`Authorization: <key>`) and refused `bearer <key>`; REST did the reverse. Both now read the
+  header the same way. **A client sending the bare key to MCP must add `Bearer `.** Keys are
+  compared in constant time on both.
+- **MCP `source_name` takes the source's name in any case, or its UUID**, as REST does. It was an
+  exact, case-sensitive name match.
+- **`source_id` in query and schema responses is the source's UUID**, whichever reference the
+  caller used. It echoed the caller's input, so a call by name returned the name.
+
+### Fixed
+- **Only one source can be registered, even under concurrent requests.** Simultaneous
+  `POST /v1/sources` calls could each pass the one-source check and all register.
+- **Error responses no longer show the server's file path.** The schema endpoint's 503 and the MCP
+  tool's missing-file error included it, as REST queries had until issue #7. An unexpected error
+  answers "internal error" on REST and MCP rather than quoting the exception; it stays in the
+  application log.
+- **The schema endpoint audits what it refuses** (`action: "schema"`: `source_not_found`,
+  `path_outside_allowed_dir`, `source_unavailable`) and answers 503, not 500, for a file it cannot
+  read.
+- **A file that cannot be read during a REST query is a 503 audited `source_unavailable`**, as on
+  MCP. It was a 500 audited `internal_error`.
+- **TDB creates the audit log's directory at startup.** With `TDB_LOG_FILE` in a directory that did
+  not exist, such as `.env.example`'s `logs/`, every request was a 500 and nothing was audited.
+  The Docker image was not affected.
+- **The row cap is pushed down to DuckDB when the query has no `LIMIT` clause of its own.** A query
+  with `limit` anywhere in it, such as a `credit_limit` column, skipped it. Responses were always
+  capped; DuckDB computed the whole result.
+
+### Removed
+- **`uv` from the image**: it is mounted for the install step only, at a pinned version. The image
+  user's uid is set to 1000, the value the Helm chart runs as.
+- Unused models (`SourceBase`, `SourceCreate`, `Source`, `QueryResult`) and the empty `tdb.api`
+  package.
+
 ## [0.17.1] — 2026-11-04
 
 ### Fixed

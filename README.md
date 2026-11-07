@@ -503,7 +503,7 @@ added but never connect:
 
 The single MCP tool exposed is `query_source`. It accepts:
 - `sql` (required) — a SQL `SELECT` statement; use `data` as the table name.
-- `source_name` (optional) — the registered source to query. Defaults to the only registered source (Community Edition has just one).
+- `source_name` (optional) — the registered source to query, by name (any case) or UUID. Defaults to the only registered source (Community Edition has just one).
 
 Returns rows as JSON inside a JSON-RPC `tools/call` result envelope.
 

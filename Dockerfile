@@ -1,8 +1,5 @@
 FROM python:3.12-slim
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
 WORKDIR /app
 
 # Copy dependency manifests
@@ -10,7 +7,9 @@ COPY requirements.txt ./
 
 # Install all runtime dependencies into the system Python
 # (project source is added via PYTHONPATH below — no need to install the package itself)
-RUN uv pip install --system --no-cache -r requirements.txt \
+# uv is mounted for this step only, so the image ships no package manager.
+RUN --mount=from=ghcr.io/astral-sh/uv:0.13.7,source=/uv,target=/bin/uv \
+    uv pip install --system --no-cache -r requirements.txt \
     # pip comes with the base image and nothing at runtime uses it — uv installs
     # the dependencies. Removed, with ensurepip's bundled wheel, so the image
     # does not carry a package manager (or its CVEs, e.g. CVE-2026-13346).
@@ -25,7 +24,8 @@ COPY src/ ./src/
 RUN mkdir -p /app/data /app/logs
 
 # Non-root user
-RUN adduser --disabled-password --gecos "" tdb && chown -R tdb:tdb /app
+# uid 1000: the Helm chart runs as runAsUser 1000.
+RUN adduser --disabled-password --gecos "" --uid 1000 tdb && chown -R tdb:tdb /app
 USER tdb
 
 ENV PYTHONPATH=/app/src

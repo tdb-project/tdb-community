@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import duckdb
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from tdb.audit.logger import get_logger, log_denial
@@ -189,14 +190,21 @@ def delete_source(
 )
 def get_source_schema(
     source_id: str,
-    _api_key: str = Depends(require_api_key),
+    api_key: str = Depends(require_api_key),
 ) -> SourceSchema:
     """
     Returns the column names and inferred DuckDB types for the registered CSV.
     No rows are returned — schema introspection only.
     """
+    key_hint = api_key[:6] + "..." if api_key else ""
     record = get_source_by_ref(source_id)
     if record is None:
+        log_denial(
+            action="schema",
+            reason="source_not_found",
+            source_id=source_id,
+            key_hint=key_hint,
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Source '{source_id}' not found.",
@@ -204,26 +212,44 @@ def get_source_schema(
 
     connector = CsvConnector(record.connection)
     if not connector.path_is_allowed():
+        log_denial(
+            action="schema",
+            reason="path_outside_allowed_dir",
+            source_id=record.id,
+            key_hint=key_hint,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This source's file is outside the allowed data directory.",
         )
-    if not connector.validate_connection():
+    try:
+        if not connector.validate_connection():
+            raise FileNotFoundError(record.connection.get("file_path"))
+        schema_dict = connector.get_schema()
+    except (FileNotFoundError, duckdb.Error) as exc:
+        _log.warning("schema_unavailable source_id=%s error=%s", record.id, str(exc))
+        log_denial(
+            action="schema",
+            reason="source_unavailable",
+            source_id=record.id,
+            key_hint=key_hint,
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"CSV file is not accessible: {record.connection.get('file_path')}",
-        )
-
-    schema_dict = connector.get_schema()
+            detail=(
+                f"Source '{record.name}' is not accessible — its underlying "
+                "file is missing or unreadable."
+            ),
+        ) from exc
 
     _log.info(
         "schema_inspected source_id=%s column_count=%d",
-        source_id,
+        record.id,
         len(schema_dict),
     )
 
     return SourceSchema(
-        source_id=source_id,
+        source_id=record.id,
         source_name=record.name,
         columns=[
             SchemaColumn(name=col, type=dtype) for col, dtype in schema_dict.items()
