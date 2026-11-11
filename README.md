@@ -20,7 +20,7 @@ agent's context window, so the agent's tokens go on your answer
 ([Saving tokens](#saving-tokens-lean-mode)).
 
 **Community edition:** one CSV file, one API key, unlimited queries, full audit log.
-[Enterprise edition](https://docs.tdb.jiracorp.co.in/pricing/) adds PostgreSQL, multi-source, OAuth 2.1, RBAC, and SOC 2-ready audit export.
+[Enterprise edition](https://docs.tdb.asvanlabs.com/pricing/) adds PostgreSQL, multi-source, OAuth 2.1, RBAC, and SOC 2-ready audit export.
 
 
 ---
@@ -229,7 +229,7 @@ To review refused attempts specifically:
 A Helm chart is in [`charts/tdb-community`](charts/tdb-community): one pod, a persistent
 volume for the registry and audit log, your CSVs mounted read-only, non-root with a
 read-only root filesystem. See its [README](charts/tdb-community/README.md) or the
-[Kubernetes guide](https://docs.tdb.jiracorp.co.in/deployment/kubernetes/).
+[Kubernetes guide](https://docs.tdb.asvanlabs.com/deployment/kubernetes/).
 
 ### Stopping TDB
 
@@ -314,7 +314,7 @@ A successful response returns a JSON-RPC result with `serverInfo` and `capabilit
 
 TDB speaks MCP `2024-11-05`, `2025-06-18`, `2025-11-25` and `2026-07-28` on this
 one endpoint, so older and current clients both connect unchanged. See the
-[MCP reference](https://docs.tdb.jiracorp.co.in/api/mcp/#protocol-versions) for
+[MCP reference](https://docs.tdb.asvanlabs.com/api/mcp/#protocol-versions) for
 what each version adds.
 
 ### Saving tokens (Lean Mode)
@@ -333,7 +333,7 @@ Ask for it in the prompt (*"use lean: true"*), or turn it on for every call with
 `-e TDB_LEAN_MODE=on` on `docker run`. A call's own arguments win, and `lean: false`
 always gets the default format back. With nothing set, nothing changes. The clients
 below have no Lean setting of their own: it is set here, on the server. Details in the
-[MCP reference](https://docs.tdb.jiracorp.co.in/api/mcp/#saving-tokens-lean-mode).
+[MCP reference](https://docs.tdb.asvanlabs.com/api/mcp/#saving-tokens-lean-mode).
 
 Push work into the SQL as well: `GROUP BY` and `WHERE` run in the database, so the
 agent reads the answer rather than the rows behind it.
@@ -607,7 +607,7 @@ of `SELECT *`).
 
 SAML is built on request.
 
-See the [full edition comparison](https://docs.tdb.jiracorp.co.in/pricing/) — email <hello@tdb.jiracorp.co.in> for pricing and a free 30-day evaluation.
+See the [full edition comparison](https://docs.tdb.asvanlabs.com/pricing/) — email <hello@tdb.asvanlabs.com> for pricing and a free 30-day evaluation.
 
 ---
 
@@ -707,4 +707,4 @@ and check the [audit log](#step-5--check-the-audit-log) to see exactly what SQL 
 [AGPLv3](LICENSE) — free to use, modify, and self-host.
 If you distribute a modified version as a network service, you must release your changes under the same license.
 
-Enterprise features and a commercial license (no AGPL obligations) are described on the [editions page](https://docs.tdb.jiracorp.co.in/pricing/).
+Enterprise features and a commercial license (no AGPL obligations) are described on the [editions page](https://docs.tdb.asvanlabs.com/pricing/).

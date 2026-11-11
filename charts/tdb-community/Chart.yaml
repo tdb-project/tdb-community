@@ -2,9 +2,9 @@ apiVersion: v2
 name: tdb-community
 description: The Data-Bridge (TDB) community edition — governed, audited, read-only MCP and REST access to a CSV source.
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: "0.18.0"
-home: https://tdb.jiracorp.co.in/
+home: https://tdb.asvanlabs.com/
 sources:
   - https://github.com/tdb-project/tdb-community
 keywords: [mcp, sql, audit, ai-agents]

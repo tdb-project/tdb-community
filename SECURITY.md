@@ -22,7 +22,7 @@ Report security issues via **GitHub's private security advisory** mechanism:
 2. Click **"New draft security advisory"**
 3. Describe the vulnerability, steps to reproduce, and potential impact
 
-You can also email us directly: **security@tdb.jiracorp.co.in**
+You can also email us directly: **security@tdb.asvanlabs.com**
 
 ### Response SLA
 - **Acknowledgement:** within 48 hours of receiving the report
