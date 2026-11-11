@@ -39,4 +39,4 @@ release notes print the exact commands.
 | `resources`, `nodeSelector`, `tolerations`, `affinity`, `podAnnotations` | | As usual |
 
 Serve it over HTTPS (Ingress with TLS, or a proxy) before anything outside the cluster
-uses it. Full guide: https://docs.tdb.jiracorp.co.in/deployment/kubernetes/
+uses it. Full guide: https://docs.tdb.asvanlabs.com/deployment/kubernetes/
