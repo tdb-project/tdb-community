@@ -9,6 +9,14 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.18.1] — 2026-11-16
+
+### Fixed
+- **One MCP request no longer holds up every other request.** `/v1/mcp` checked the key and ran
+  the query on the server's event loop, so while a slow query ran nothing else was answered,
+  health checks included. Both now run on a worker thread. Found in a review of the enterprise
+  edition, which shares this code.
+
 ## [0.18.0] — 2026-11-07
 
 > **Fixes from an independent review of 0.17.1.** Each finding was reproduced before it was fixed.
