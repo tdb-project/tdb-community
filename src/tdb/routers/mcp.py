@@ -36,6 +36,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
 from tdb import __version__, lean
@@ -659,7 +660,12 @@ async def _serve(request: Request) -> Response:
         )
     if not isinstance(body, dict):
         return JSONResponse(_err(None, -32600, "Invalid Request"), status_code=400)
+    # Authentication and the tools read the registry and run the query, all blocking:
+    # on the event loop one slow query held every other request for its whole time.
+    return await run_in_threadpool(_dispatch, request, body)
 
+
+def _dispatch(request: Request, body: dict) -> Response:
     if _is_modern(request, body):
         return _serve_modern(request, body)
 
