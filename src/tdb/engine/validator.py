@@ -103,6 +103,20 @@ _ANSI = _DIALECTS[0]
 # it through widens nothing.
 _ALLOWED_PREFIXES = ("select", "with")
 
+# Functions a read may not call, matched on the whole text, strings, comments and quoted
+# identifiers included, so no quoting hides one. A database lets a role signal its own
+# sessions, and every caller of a source shares its role: `pg_terminate_backend` and
+# `pg_cancel_backend` (PostgreSQL) and `SYSTEM$CANCEL_*` / `SYSTEM$ABORT_*` (Snowflake)
+# let any key end other callers' queries. `query_to_xml…`, `ts_stat` and `ts_rewrite`
+# run SQL given as text, so they would reach a refused function past this check, and a
+# unicode-escaped identifier (`U&"…"`) can spell any name. A literal that merely
+# mentions one is refused too: over-refusal is the cost of matching inside quotes.
+_REFUSED_FUNCTIONS = re.compile(
+    r"(?<![a-z0-9_$])(?:pg_terminate_backend|pg_cancel_backend|query_to_xml\w*"
+    r"|ts_stat|ts_rewrite)(?![a-z0-9_$])|system\$(?:cancel|abort)_|u&\"",
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class ValidationResult:
@@ -268,6 +282,12 @@ def validate_sql(sql: str) -> ValidationResult:
     stripped = sql.strip()
     if not stripped:
         return ValidationResult(is_valid=False, reason="Empty SQL")
+
+    refused = _REFUSED_FUNCTIONS.search(stripped)
+    if refused:
+        return ValidationResult(
+            is_valid=False, reason=f"Function not allowed: {refused.group(0)}"
+        )
 
     for dialect in _DIALECTS:
         result = _validate_masked(_mask_noncode(stripped, dialect))
