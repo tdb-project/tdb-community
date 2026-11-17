@@ -9,6 +9,18 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.18.2] — 2026-11-17
+
+### Changed
+- **SQL that names a function which signals other database sessions, or runs SQL given as
+  text, is refused** (`400`, audited `sql_validation_failed`): `pg_terminate_backend`,
+  `pg_cancel_backend`, `query_to_xml…`, `ts_stat`, `ts_rewrite`, Snowflake's
+  `SYSTEM$CANCEL_…` / `SYSTEM$ABORT_…`, and a unicode-escaped identifier (`U&"…"`). The names
+  are matched inside quotes and comments too, so a query whose text merely mentions one is
+  refused. The validator is shared with the enterprise edition, where one key could end
+  another caller's PostgreSQL query; CSV sources have none of these functions. Parity
+  invariant **P23**.
+
 ## [0.18.1] — 2026-11-16
 
 ### Fixed

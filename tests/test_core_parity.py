@@ -938,6 +938,50 @@ class TestP22AFailedQueryIsAuditedInBothEditions:
         assert failure_reason(make()) == reason
 
 
+class TestP23SignalAndDynamicSqlFunctionsAreRefused:
+    """
+    P23 — a read may not end other callers' queries. Every caller of a source shares
+    its database role, and a role may signal its own sessions, so `pg_terminate_backend`
+    from one key ended another's query (reproduced on PostgreSQL 16). The names are
+    matched in quotes and comments too, the functions that run SQL given as text are
+    refused, and a unicode-escaped identifier is refused, because each of those carried
+    the call past a keyword scan on a real PostgreSQL.
+    """
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity",
+            'SELECT "pg_terminate_backend"(1)',
+            "SELECT pg_catalog.PG_CANCEL_BACKEND(1)",
+            'SELECT U&"pg_t\\0065rminate_backend"(1)',
+            "SELECT query_to_xml('select 1', false, false, '')",
+            "SELECT query_to_xmlschema('select 1', false, false, '')",
+            "SELECT * FROM ts_stat('select 1')",
+            "SELECT ts_rewrite('a'::tsquery, 'select 1')",
+            "SELECT SYSTEM$CANCEL_ALL_QUERIES(1)",
+            "SELECT system$abort_session(1)",
+        ],
+    )
+    def test_refused(self, sql: str) -> None:
+        result = validate_sql(sql)
+        assert not result.is_valid
+        assert result.reason.startswith("Function not allowed")
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "SELECT ts_status, ts_stats_x FROM t",
+            "SELECT pid, state FROM pg_stat_activity",
+            "SELECT my_pg_terminate_backend_log FROM t",
+            "SELECT system$clustering_information('t')",
+            "SELECT u&'text' AS x",
+        ],
+    )
+    def test_near_misses_run(self, sql: str) -> None:
+        assert validate_sql(sql).is_valid
+
+
 def _base():
     from tdb.connectors import base
 
