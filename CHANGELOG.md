@@ -9,6 +9,17 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.18.4] — 2026-11-18
+
+### Security
+
+- **Session lock functions are refused.** `pg_advisory_*`, `pg_try_advisory_*` and
+  MySQL's `GET_LOCK`, `RELEASE_LOCK` and `RELEASE_ALL_LOCKS` are refused by the shared
+  validator, matched on the whole text as the signal functions are (parity **P24**). A
+  session lock outlives a rollback, so on a database source a read could hold one against
+  the source's own applications. CSV sources have none of these functions; this keeps the
+  validator identical in both editions.
+
 ## [0.18.3] — 2026-11-18
 
 ### Security

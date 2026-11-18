@@ -109,11 +109,14 @@ _ALLOWED_PREFIXES = ("select", "with")
 # `pg_cancel_backend` (PostgreSQL) and `SYSTEM$CANCEL_*` / `SYSTEM$ABORT_*` (Snowflake)
 # let any key end other callers' queries. `query_to_xml…`, `ts_stat` and `ts_rewrite`
 # run SQL given as text, so they would reach a refused function past this check, and a
-# unicode-escaped identifier (`U&"…"`) can spell any name. A literal that merely
+# unicode-escaped identifier (`U&"…"`) can spell any name. Session locks
+# (`pg_advisory_*`, MySQL `GET_LOCK`) outlive a rollback, so a pooled session kept one
+# against the source's own applications. A literal that merely
 # mentions one is refused too: over-refusal is the cost of matching inside quotes.
 _REFUSED_FUNCTIONS = re.compile(
     r"(?<![a-z0-9_$])(?:pg_terminate_backend|pg_cancel_backend|query_to_xml\w*"
-    r"|ts_stat|ts_rewrite)(?![a-z0-9_$])|system\$(?:cancel|abort)_|u&\"",
+    r"|ts_stat|ts_rewrite|pg_(?:try_)?advisory_\w+|get_lock|release_lock"
+    r"|release_all_locks)(?![a-z0-9_$])|system\$(?:cancel|abort)_|u&\"",
     re.IGNORECASE,
 )
 
