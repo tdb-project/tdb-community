@@ -982,6 +982,48 @@ class TestP23SignalAndDynamicSqlFunctionsAreRefused:
         assert validate_sql(sql).is_valid
 
 
+class TestP24SessionLockFunctionsAreRefused:
+    """
+    P24 — a read may not hold a lock against the source's own applications. A session
+    advisory lock (PostgreSQL) or named lock (MySQL) outlives a rollback, so a pooled
+    TDB session kept one, idle, after the query ended; migrations and job queues lock
+    this way. Matched in quotes and comments too, as P23.
+    """
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "SELECT pg_advisory_lock(1)",
+            "SELECT pg_advisory_lock_shared(1)",
+            "SELECT pg_try_advisory_lock(1)",
+            "SELECT pg_advisory_xact_lock(1)",
+            "SELECT pg_try_advisory_xact_lock_shared(1, 2)",
+            "SELECT pg_advisory_unlock_all()",
+            'SELECT "pg_advisory_lock"(1)',
+            "SELECT pg_catalog.PG_ADVISORY_LOCK(1)",
+            "SELECT GET_LOCK('deploy', 10)",
+            "SELECT release_lock('deploy')",
+            "SELECT RELEASE_ALL_LOCKS()",
+        ],
+    )
+    def test_refused(self, sql: str) -> None:
+        result = validate_sql(sql)
+        assert not result.is_valid
+        assert result.reason.startswith("Function not allowed")
+
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "SELECT locktype, mode FROM pg_locks",
+            "SELECT is_free_lock('deploy')",
+            "SELECT my_get_lock_count, budget_lock FROM t",
+            "SELECT pg_advisory FROM t",
+        ],
+    )
+    def test_near_misses_run(self, sql: str) -> None:
+        assert validate_sql(sql).is_valid
+
+
 def _base():
     from tdb.connectors import base
 
