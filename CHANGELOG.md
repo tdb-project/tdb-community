@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.18.3] — 2026-11-18
+
 ### Security
 
 - **`tdb query` printed data through Rich markup.** A value holding `[b]…[/b]` or `[x]`
