@@ -18,11 +18,14 @@ import csv as csv_module
 import io
 import json
 import os
+import sys
 from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
+from rich.text import Text
 
 from tdb.cli.client import get_base_url, make_client
 
@@ -37,7 +40,24 @@ err = Console(stderr=True)
 _OUTPUT_FORMATS = frozenset({"table", "json", "csv"})
 
 
-def _cell(value: object) -> str:
+def _shown(value: object) -> str:
+    """Text from the server or the data, with control characters made visible.
+
+    A cell or an error message can hold anything the source holds, and a raw
+    escape sequence reaches the terminal: it can clear the screen or rewrite
+    what was printed before it.
+    """
+    return "".join(
+        c if c.isprintable() or c in "\n\t" else f"\\u{ord(c):04x}" for c in str(value)
+    )
+
+
+def _s(value: object) -> str:
+    """`_shown`, and escaped for a Rich markup string: `[b]` in data is not a tag."""
+    return escape(_shown(value))
+
+
+def _cell(value: object) -> Text:
     """Render one table cell.
 
     NULL prints blank rather than "None". `str(None)` is the string "None",
@@ -46,7 +66,7 @@ def _cell(value: object) -> str:
     both `--output csv` and psql's default. Use `--output json` when null and the
     empty string have to be told apart; that is the only format that can.
     """
-    return "" if value is None else str(value)
+    return Text("" if value is None else _shown(value))
 
 
 def _error_detail(response) -> str:
@@ -105,9 +125,9 @@ def serve(
         err.print("[red]uvicorn is not installed. Run: pip install uvicorn[/red]")
         raise typer.Exit(1)
 
-    console.print(f"[green]Starting TDB on http://{host}:{port}[/green]")
-    console.print(f"  Docs: http://{host}:{port}/docs")
-    console.print(f"  MCP:  http://{host}:{port}/v1/mcp")
+    console.print(f"[green]Starting TDB on http://{_s(host)}:{port}[/green]")
+    console.print(f"  Docs: http://{_s(host)}:{port}/docs")
+    console.print(f"  MCP:  http://{_s(host)}:{port}/v1/mcp")
     uvicorn.run("tdb.main:app", host=host, port=port, reload=reload)
 
 
@@ -135,12 +155,13 @@ def register(
     """
     path = Path(file_path)
     if not path.is_file():
-        err.print(f"[red]File not found: {file_path}[/red]")
+        err.print(f"[red]File not found: {_s(file_path)}[/red]")
         raise typer.Exit(1)
 
     if path.suffix.lower() != ".csv":
         err.print(
-            f"[yellow]Warning: file does not have .csv extension: {file_path}[/yellow]"
+            "[yellow]Warning: file does not have .csv extension: "
+            f"{_s(file_path)}[/yellow]"
         )
 
     tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
@@ -157,11 +178,11 @@ def register(
         with make_client() as client:
             response = client.post("/v1/sources", json=payload)
     except RuntimeError as exc:
-        err.print(f"[red]{exc}[/red]")
+        err.print(f"[red]{_s(exc)}[/red]")
         raise typer.Exit(1)
     except Exception as exc:
-        err.print(f"[red]Could not connect to TDB at {get_base_url()}[/red]")
-        err.print(f"[red]{exc}[/red]")
+        err.print(f"[red]Could not connect to TDB at {_s(get_base_url())}[/red]")
+        err.print(f"[red]{_s(exc)}[/red]")
         err.print(
             "[yellow]Is the server running? Use 'tdb serve' to start it.[/yellow]"
         )
@@ -170,15 +191,17 @@ def register(
     if response.status_code == 201:
         data = response.json()
         console.print("[green]Source registered.[/green]")
-        console.print(f"  ID:   [bold]{data['id']}[/bold]")
-        console.print(f"  Name: {data['name']}")
-        console.print(f"  File: {data['connection']['file_path']}")
+        console.print(f"  ID:   [bold]{_s(data['id'])}[/bold]")
+        console.print(f"  Name: {_s(data['name'])}")
+        console.print(f"  File: {_s(data['connection']['file_path'])}")
     elif response.status_code == 401:
         err.print("[red]Authentication failed. Check TDB_API_KEYS.[/red]")
         raise typer.Exit(1)
     else:
         detail = response.json().get("detail", response.text)
-        err.print(f"[red]Registration failed ({response.status_code}): {detail}[/red]")
+        err.print(
+            f"[red]Registration failed ({response.status_code}): {_s(detail)}[/red]"
+        )
         raise typer.Exit(1)
 
 
@@ -225,14 +248,17 @@ def query(
             with make_client() as client:
                 sources_resp = client.get("/v1/sources")
         except RuntimeError as exc:
-            err.print(f"[red]{exc}[/red]")
+            err.print(f"[red]{_s(exc)}[/red]")
             raise typer.Exit(1)
         except Exception as exc:
-            err.print(f"[red]Could not connect to TDB at {get_base_url()}: {exc}[/red]")
+            err.print(
+                f"[red]Could not connect to TDB at {_s(get_base_url())}: "
+                f"{_s(exc)}[/red]"
+            )
             raise typer.Exit(1)
 
         if sources_resp.status_code != 200:
-            err.print(f"[red]Error listing sources: {sources_resp.text}[/red]")
+            err.print(f"[red]Error listing sources: {_s(sources_resp.text)}[/red]")
             raise typer.Exit(1)
 
         sources = sources_resp.json()
@@ -245,7 +271,7 @@ def query(
             names = ", ".join(str(s.get("name", s.get("id"))) for s in sources)
             err.print(
                 f"[red]{len(sources)} sources registered — name one with "
-                f"--source.[/red]\n[yellow]Registered: {names}[/yellow]"
+                f"--source.[/red]\n[yellow]Registered: {_s(names)}[/yellow]"
             )
             raise typer.Exit(1)
 
@@ -261,13 +287,13 @@ def query(
                 json={"source_id": source_id, "sql": sql, "limit": limit},
             )
     except Exception as exc:
-        err.print(f"[red]Query request failed: {exc}[/red]")
+        err.print(f"[red]Query request failed: {_s(exc)}[/red]")
         raise typer.Exit(1)
 
     if response.status_code != 200:
         err.print(
             f"[red]Query failed ({response.status_code}): "
-            f"{_error_detail(response)}[/red]"
+            f"{_s(_error_detail(response))}[/red]"
         )
         raise typer.Exit(1)
 
@@ -277,7 +303,7 @@ def query(
 
     if output not in _OUTPUT_FORMATS:
         err.print(
-            f"[red]Unknown output format: {output}[/red]\n"
+            f"[red]Unknown output format: {_s(output)}[/red]\n"
             f"[yellow]Valid formats: {', '.join(sorted(_OUTPUT_FORMATS))}[/yellow]"
         )
         raise typer.Exit(1)
@@ -290,12 +316,13 @@ def query(
         writer = csv_module.DictWriter(buf, fieldnames=columns)
         writer.writeheader()
         writer.writerows(rows)
-        console.print(buf.getvalue(), end="")
+        # Data, not display: written as is, so `-o csv > file` is exact.
+        sys.stdout.write(buf.getvalue())
 
     else:
         table = Table(show_header=True, header_style="bold cyan")
         for col in columns:
-            table.add_column(col)
+            table.add_column(Text(_shown(col)))
         for row in rows:
             table.add_row(*[_cell(row.get(c)) for c in columns])
         console.print(table)

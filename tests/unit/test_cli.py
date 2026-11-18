@@ -193,6 +193,64 @@ class TestQueryOutput:
         assert "0 row(s) returned" in result.output
 
 
+@pytest.fixture
+def csv_with_markup(tmp_path: Path) -> Path:
+    """Values Rich would read as markup, and escape sequences a terminal obeys."""
+    path = tmp_path / "markup.csv"
+    path.write_text(
+        'id,v\n1,[b]bold[/b] tag [x]\n2,[/b]\n3,"\x1b[2J\x1b]0;title\x07x"\n',
+        encoding="utf-8",
+    )
+    return path
+
+
+class TestDataIsShownAsData:
+    @pytest.mark.parametrize("fmt", ["table", "csv"])
+    def test_brackets_are_printed_as_written(
+        self, cli, csv_with_markup: Path, fmt: str
+    ) -> None:
+        runner.invoke(cli, ["register", str(csv_with_markup), "--name", "m"])
+
+        result = runner.invoke(cli, ["query", "SELECT v FROM data", "-o", fmt])
+
+        assert result.exit_code == 0, result.output
+        assert "[b]bold[/b] tag [x]" in result.output
+        assert "[/b]" in result.output.replace("[b]bold[/b]", "")
+
+    def test_csv_output_is_the_data_byte_for_byte(
+        self, cli, csv_with_markup: Path
+    ) -> None:
+        runner.invoke(cli, ["register", str(csv_with_markup), "--name", "m"])
+
+        result = runner.invoke(
+            cli, ["query", "SELECT v FROM data WHERE id = 3", "-o", "csv"]
+        )
+
+        assert result.exit_code == 0, result.output
+        out = result.output.replace("\r\n", "\n")
+        assert out == "v\n\x1b[2J\x1b]0;title\x07x\n"
+
+    def test_the_table_does_not_pass_escape_sequences_to_the_terminal(
+        self, cli, csv_with_markup: Path
+    ) -> None:
+        runner.invoke(cli, ["register", str(csv_with_markup), "--name", "m"])
+
+        result = runner.invoke(cli, ["query", "SELECT v FROM data WHERE id = 3"])
+
+        assert result.exit_code == 0, result.output
+        assert "\x1b" not in result.output and "\x07" not in result.output
+        assert "\\u001b[2J" in result.output
+
+    def test_an_error_is_not_read_as_markup(self, cli, csv_with_markup: Path) -> None:
+        runner.invoke(cli, ["register", str(csv_with_markup), "--name", "m"])
+
+        result = runner.invoke(cli, ["query", "SELECT [/b] FROM data"])
+
+        assert result.exit_code == 1
+        assert "MarkupError" not in result.output
+        assert "Query failed" in result.output
+
+
 class TestNullRendering:
     """The bug this file was written for."""
 

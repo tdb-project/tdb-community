@@ -9,6 +9,17 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.18.3] — 2026-11-18
+
+### Security
+
+- **`tdb query` printed data through Rich markup.** A value holding `[b]…[/b]` or `[x]`
+  lost its brackets in table and `--output csv` output, a value holding `[/b]` stopped the
+  command with `MarkupError`, and escape sequences in a value reached the terminal as they
+  were (a cell could clear the screen or set the window title). Table cells, headers and
+  error messages are now shown as text, with control characters written as `\uXXXX`;
+  `--output csv` writes the data exactly as returned.
+
 ## [0.18.2] — 2026-11-17
 
 ### Changed
