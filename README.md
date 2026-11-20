@@ -594,7 +594,7 @@ of `SELECT *`).
 
 | | Community (this repo) | Enterprise |
 |---|---|---|
-| Data sources | One CSV source | CSV, Parquet, DuckDB, PostgreSQL, MySQL, SQL Server, Snowflake; unlimited sources |
+| Data sources | One CSV source | CSV, Parquet, DuckDB, PostgreSQL, MySQL, SQL Server, Snowflake, ClickHouse; unlimited sources |
 | Auth | Single static API key | Key rotation and management, JWT, OAuth 2.1 with PKCE, per-key rate limits; single sign-on (OIDC) and SCIM on Mid-Market |
 | Access control | — | RBAC (read / readwrite / admin), MCP tool allow-lists per key; column and row policies and query approvals (a person approves sensitive reads) on Mid-Market |
 | Tenants | — | Several teams or customers on one deployment, each with its own sources, keys and audit log, on Enterprise |
